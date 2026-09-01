@@ -113,6 +113,17 @@ const fetchCodes = async () => {
 			acc[game.key] = result.value;
 		}
 		else {
+			// A dead code source is indistinguishable from a quiet day: both yield
+			// an empty list and redemption simply never runs. That is the same
+			// shape as the twelve-day outage, where nothing exercised the
+			// credential so nothing could report. Degrading to [] is still the
+			// right behaviour, since one broken source must not stop the others,
+			// but it must not be silent.
+			const reason = (result.status === "rejected")
+				? `threw (${result.reason?.message ?? String(result.reason)})`
+				: "reported a fetch failure, see the debug line above for the HTTP detail";
+
+			app.Logger.warn("CodeRedeem", `Code source for ${game.key} failed (${reason}), so nothing will be redeemed for it this run`);
 			acc[game.key] = [];
 		}
 

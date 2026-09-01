@@ -28,7 +28,7 @@ const fetchData = async () => {
 			statusCode: res.statusCode
 		});
 
-		return [];
+		return null;
 	}
 
 	const codes = res.body?.active;
@@ -38,7 +38,7 @@ const fetchData = async () => {
 			body: res.body
 		});
 
-		return [];
+		return null;
 	}
 
 	return codes.map((i) => ({
