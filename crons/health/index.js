@@ -68,6 +68,15 @@ const describe = (account) => `${account.game?.short ?? account.platform} ${acco
 
 /** A concern is down if anything is dead, undecided if anything is inconclusive. */
 const verdictFor = (findings) => {
+	if (findings.length === 0) {
+		// Nothing was probed, so nothing may be reported healthy. Unreachable
+		// today, because checkAccount returns one finding per class on every
+		// path. Guarded anyway: reporting a credential up without checking it
+		// is the exact failure this cron exists to prevent, and that must not
+		// rest on a caller elsewhere continuing to behave.
+		return { decided: false };
+	}
+
 	const dead = findings.filter(f => f.state === "dead");
 	if (dead.length !== 0) {
 		return { decided: true, up: false, message: dead.map(f => f.line).join(" | ") };
@@ -89,6 +98,19 @@ module.exports = {
 		const urls = config.kuma ?? {};
 		const accounts = app.HoyoLab.getActiveAccounts({ blacklist: ["honkai", "tot"] });
 		if (accounts.length === 0) {
+			// Returning here used to skip the liveness push too, so a config
+			// mistake that emptied this list looked exactly like a dead process.
+			// Liveness answers "is the bot doing its job at all", and a bot with
+			// no accounts is not, so say that instead of going silent.
+			const livenessUrl = urls.liveness;
+			if (livenessUrl && !livenessUrl.startsWith("$")) {
+				await pushHeartbeat("liveness", livenessUrl, {
+					up: false,
+					message: "no active accounts configured, so the bot is doing nothing. Check the platforms block in config.json5"
+				});
+			}
+
+			app.Logger.error("Cron:Health", "No active accounts, so nothing is being checked in, redeemed or reminded. This is a config fault, not a credential one.");
 			return;
 		}
 
@@ -131,11 +153,19 @@ module.exports = {
 			}
 
 			const url = urls[concern];
-			if (!url || url.startsWith("$")) {
-				// Unconfigured is legitimate for a local run or a fresh clone. An
-				// unrendered "$VAR" means someone added it to the config template but
-				// not to the Dockerfile's envsubst list.
+			if (!url) {
+				// Legitimate for a local run or a fresh clone.
 				app.Logger.debug("Cron:Health", `No push URL for "${concern}", so its result is logged only`);
+				continue;
+			}
+
+			if (url.startsWith("$")) {
+				// An unrendered "$VAR" means someone added it to the config template
+				// but not to the Dockerfile's envsubst list. That is a monitoring
+				// outage: this concern goes dark while its siblings keep reporting
+				// green, so it must be loud in the logs rather than a debug line.
+				// The monitor itself still pages, because it stops receiving beats.
+				app.Logger.error("Cron:Health", `Push URL for "${concern}" is still the literal "${url}", so that watchdog is blind. Add it to the envsubst list in the Dockerfile.`);
 				continue;
 			}
 
