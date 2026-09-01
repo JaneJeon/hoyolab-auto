@@ -15,6 +15,7 @@ const URLS = {
  */
 const withStubs = ({ accounts, probeResults, urls = URLS }) => {
 	const pushes = [];
+	const sent = [];
 	const logs = { error: [], warn: [], debug: [] };
 	const queue = [...probeResults];
 
@@ -29,6 +30,7 @@ const withStubs = ({ accounts, probeResults, urls = URLS }) => {
 		},
 		Got: async (_name, opts) => {
 			pushes.push(opts.url);
+			sent.push(opts);
 			return { statusCode: 200, body: "OK" };
 		}
 	};
@@ -43,7 +45,7 @@ const withStubs = ({ accounts, probeResults, urls = URLS }) => {
 		return next;
 	};
 
-	return { pushes, logs };
+	return { pushes, sent, logs };
 };
 
 /** Finds the push for one monitor and decodes it into a readable string. */
@@ -187,4 +189,24 @@ test("an unrendered envsubst placeholder counts as unconfigured", async () => {
 	await Health.code();
 
 	assert.strictEqual(pushes.length, 0);
+});
+
+test("the heartbeat identifies itself honestly, not as a browser", async () => {
+	// The watchdog sits behind Cloudflare. A Chrome User-Agent with a Node TLS
+	// fingerprint gets challenged with a 403, and so does Node's default agent.
+	// Both were observed from inside the container. A blocked heartbeat means a
+	// blind watchdog, so this header is load-bearing.
+	const { sent } = withStubs({
+		accounts: [ACCOUNT],
+		probeResults: [[{ credential: "ltoken_v2", state: "healthy", impact: "check-in" }]]
+	});
+
+	await Health.code();
+
+	assert.ok(sent.length > 0, "something must have been pushed");
+	for (const opts of sent) {
+		const ua = opts.headers?.["User-Agent"];
+		assert.strictEqual(ua, Health.HEARTBEAT_USER_AGENT);
+		assert.ok(!/Mozilla|Chrome|Safari/i.test(ua), "must not claim to be a browser");
+	}
 });

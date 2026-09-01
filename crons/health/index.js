@@ -3,6 +3,18 @@ const CredentialProbe = require("../../object/credential-probe.js");
 const HEARTBEAT_TIMEOUT_MS = 15000;
 
 /**
+ * The heartbeat identifies itself honestly instead of inheriting the app's
+ * browser User-Agent.
+ *
+ * The watchdog sits behind Cloudflare, whose bot rules challenge a request that
+ * claims to be Chrome but has a Node TLS fingerprint, and also challenge Node's
+ * own default agent. Both got HTTP 403 "Just a moment" from inside the
+ * container, while a plain custom agent got 200. A blocked heartbeat means a
+ * blind watchdog, so this header is load-bearing, not cosmetic.
+ */
+const HEARTBEAT_USER_AGENT = "hoyolab-auto-healthcheck";
+
+/**
  * One push monitor per independently-failing concern.
  *
  * An aggregate monitor cannot say WHICH thing broke, and it lets one failure
@@ -31,6 +43,7 @@ const pushHeartbeat = async (concern, url, { up, message }) => {
 			method: "GET",
 			responseType: "text",
 			throwHttpErrors: false,
+			headers: { "User-Agent": HEARTBEAT_USER_AGENT },
 			timeout: { request: HEARTBEAT_TIMEOUT_MS }
 		});
 
@@ -143,5 +156,6 @@ module.exports = {
 		}
 	}),
 	CONCERNS,
-	verdictFor
+	verdictFor,
+	HEARTBEAT_USER_AGENT
 };
