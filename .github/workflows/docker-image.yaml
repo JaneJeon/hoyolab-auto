@@ -4,9 +4,19 @@ on:
   push:
     branches: [main]
 
+# Without this, two pushes in quick succession race, and a slow older run can
+# finish last and retag `main` backwards to the older commit's image. One run
+# did hang for 27+ minutes while a later commit built and published fine.
+concurrency:
+  group: docker-image-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    # The default is 6 hours. An emulated build that wedges should fail fast
+    # rather than burn a runner all day.
+    timeout-minutes: 20
 
     env:
       REGISTRY: ghcr.io
@@ -45,7 +55,12 @@ jobs:
         with:
           context: .
           push: true
-          platforms: linux/amd64,linux/arm64
+          # amd64 only. The sole consumer is the Railway service defined in
+          # JaneJeon/self-hosted, which runs x86-64, and nothing in either repo
+          # references arm64. The emulated arm64 leg was about half the build's
+          # wall clock (76s vs 13s for `npm install` alone) and is where a build
+          # hung. Re-add it here if a consumer ever needs it.
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
