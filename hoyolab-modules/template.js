@@ -14,7 +14,6 @@ module.exports = class HoyoLab {
 
 	/** @type {HoyoLab[]} */
 	static list = [];
-	static webAPI = "https://webapi-os.account.hoyoverse.com/Api/fetch_cookie_accountinfo";
 
 	constructor (name, config, defaults = {}) {
 		this.#name = name;
@@ -203,7 +202,6 @@ module.exports = class HoyoLab {
 	get config () { return this.#config; }
 	get type () { return this.#name; }
 	get dataCache () { return this.#dataCache; }
-	get webAPI () { return HoyoLab.webAPI; }
 
 	get fullName () {
 		const nameMap = {
@@ -516,57 +514,6 @@ module.exports = class HoyoLab {
 		throw new app.Error({
 			message: "This method is not implemented by the derived class."
 		});
-	}
-
-	async updateCookie (accountData) {
-		const res = await app.Got("HoYoLab", {
-			url: this.webAPI,
-			responseType: "json",
-			throwHttpErrors: false,
-			headers: {
-				Cookie: accountData.cookie
-			}
-		});
-
-		if (!res.ok) {
-			app.Logger.log(`${this.fullName}:UpdateCookie`, {
-				message: "Failed to update cookie",
-				args: {
-					platform: this.name,
-					uid: accountData.uid,
-					region: accountData.region,
-					body: res.body
-				}
-			});
-
-			return { success: false };
-		}
-
-		const data = res.body.data;
-		if (!data || data.status !== 1 || !data?.cookie_info) {
-			app.Logger.log(`${this.fullName}:UpdateCookie`, {
-				message: "Failed to update cookie",
-				args: {
-					platform: this.name,
-					uid: accountData.uid,
-					region: accountData.region,
-					body: res.body
-				}
-			});
-
-			return { success: false };
-		}
-
-		const accountId = data.cookie_info.account_id;
-		const token = data.cookie_info.cookie_token;
-
-		return {
-			success: true,
-			data: {
-				accountId,
-				token
-			}
-		};
 	}
 
 	static create (type, config) {

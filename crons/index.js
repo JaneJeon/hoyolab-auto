@@ -12,7 +12,6 @@ const MissedCheckIn = require("./missed-check-in/index.js");
 const RealmCurrency = require("./realm-currency/index.js");
 const ShopStatus = require("./shop-status/index.js");
 const Stamina = require("./stamina/index.js");
-const UpdateCookie = require("./update-cookie/index.js");
 const WeekliesReminder = require("./weeklies-reminder/index.js");
 
 const config = require("../config.js");
@@ -30,7 +29,6 @@ const definitions = [
 	RealmCurrency,
 	ShopStatus,
 	Stamina,
-	UpdateCookie,
 	WeekliesReminder
 ];
 
