@@ -216,3 +216,66 @@ test("the heartbeat identifies itself honestly, not as a browser", async () => {
 		assert.ok(!/Mozilla|Chrome|Safari/i.test(ua), "must not claim to be a browser");
 	}
 });
+
+test("a concern with no findings is undecided, never up", () => {
+	// Reporting a credential healthy without having probed it is the exact
+	// failure this cron exists to prevent. An empty list must push nothing, so
+	// the missed heartbeat pages instead of a green light standing in for a
+	// check that never ran.
+	assert.deepStrictEqual(Health.verdictFor([]), { decided: false });
+});
+
+test("a concern whose findings are all healthy is up, and counts them", () => {
+	const verdict = Health.verdictFor([
+		{ state: "healthy", line: "one" },
+		{ state: "healthy", line: "two" }
+	]);
+
+	assert.strictEqual(verdict.decided, true);
+	assert.strictEqual(verdict.up, true);
+	assert.strictEqual(verdict.message, "2 account(s) OK");
+});
+
+test("no active accounts takes liveness down instead of going silent", async () => {
+	// This used to return before every push, so a config mistake that emptied
+	// the account list was indistinguishable from a dead process. A bot with no
+	// accounts is not doing its job, and liveness is where that belongs.
+	const { pushes, logs } = withStubs({ accounts: [], probeResults: [] });
+
+	await Health.code();
+
+	const liveness = pushFor(pushes, "live");
+	assert.match(liveness, /status=down/);
+	assert.match(liveness, /no active accounts/);
+
+	// Nothing was probed, so neither credential may be reported either way.
+	assert.strictEqual(pushFor(pushes, "lt"), null);
+	assert.strictEqual(pushFor(pushes, "ct"), null);
+
+	assert.ok(logs.error.some(m => /config fault/.test(m)), "must say this is a config fault");
+});
+
+test("an unrendered push URL is an error, because that watchdog is blind", async () => {
+	// A literal "$KUMA_..." means the variable reached the config template but
+	// not the Dockerfile's envsubst list. That concern goes dark while its
+	// siblings keep reporting green, which is the failure this cron exists to
+	// prevent, so it must not be a debug line.
+	const { pushes, logs } = withStubs({
+		accounts: [ACCOUNT],
+		probeResults: [[
+			{ credential: "ltoken_v2", state: "healthy", impact: "check-in" },
+			{ credential: "cookie_token_v2", state: "healthy", impact: "code redemption" }
+		]],
+		urls: { ...URLS, ltoken: "$KUMA_PUSH_URL_LTOKEN" }
+	});
+
+	await Health.code();
+
+	assert.strictEqual(pushFor(pushes, "lt"), null, "must not push to a literal variable name");
+	assert.ok(logs.error.some(m => /blind/.test(m)), "must log at error, not debug");
+	assert.strictEqual(logs.debug.filter(m => /No push URL/.test(m)).length, 0);
+
+	// The siblings must be unaffected.
+	assert.match(pushFor(pushes, "ct"), /status=up/);
+	assert.match(pushFor(pushes, "live"), /status=up/);
+});
