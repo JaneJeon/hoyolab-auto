@@ -28,11 +28,17 @@ const withStubs = ({ accounts, probeResults, urls = URLS }) => {
 			info: () => {},
 			debug: (_t, m) => logs.debug.push(m)
 		},
-		Got: async (_name, opts) => {
-			pushes.push(opts.url);
-			sent.push(opts);
-			return { statusCode: 200, body: "OK" };
+		Got: async () => {
+			throw new Error("the heartbeat must not use the app's got stack");
 		}
+	};
+
+	// The heartbeat uses plain fetch, not app.Got, because Cloudflare challenges
+	// every got request to the watchdog. See crons/health/index.js.
+	globalThis.fetch = async (url, opts = {}) => {
+		pushes.push(String(url));
+		sent.push({ url: String(url), headers: opts.headers ?? {} });
+		return { status: 200, text: async () => "OK" };
 	};
 
 	const probeModule = require("../object/credential-probe.js");
@@ -58,6 +64,7 @@ const ACCOUNT = { uid: "714798638", platform: "starrail", game: { short: "HSR" }
 
 test.afterEach(() => {
 	delete globalThis.app;
+	delete globalThis.fetch;
 });
 
 test("all healthy pushes up on every monitor", async () => {
@@ -192,10 +199,9 @@ test("an unrendered envsubst placeholder counts as unconfigured", async () => {
 });
 
 test("the heartbeat identifies itself honestly, not as a browser", async () => {
-	// The watchdog sits behind Cloudflare. A Chrome User-Agent with a Node TLS
-	// fingerprint gets challenged with a 403, and so does Node's default agent.
-	// Both were observed from inside the container. A blocked heartbeat means a
-	// blind watchdog, so this header is load-bearing.
+	// Measured from inside the container: fetch carrying the app's spoofed Chrome
+	// agent is challenged by Cloudflare with a 403, and so is got with any agent.
+	// A blocked heartbeat means a blind watchdog, so this is load-bearing.
 	const { sent } = withStubs({
 		accounts: [ACCOUNT],
 		probeResults: [[{ credential: "ltoken_v2", state: "healthy", impact: "check-in" }]]
@@ -204,8 +210,8 @@ test("the heartbeat identifies itself honestly, not as a browser", async () => {
 	await Health.code();
 
 	assert.ok(sent.length > 0, "something must have been pushed");
-	for (const opts of sent) {
-		const ua = opts.headers?.["User-Agent"];
+	for (const req of sent) {
+		const ua = req.headers?.["User-Agent"];
 		assert.strictEqual(ua, Health.HEARTBEAT_USER_AGENT);
 		assert.ok(!/Mozilla|Chrome|Safari/i.test(ua), "must not claim to be a browser");
 	}
