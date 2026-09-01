@@ -30,17 +30,27 @@ Full API reference, including the probe endpoints and their retcodes, is in the 
 
 ## The health cron
 
-`crons/health/index.js` runs every 30 minutes and once at startup. It probes each credential class **separately** against HoYoverse's own passport API, then reports to Uptime Kuma:
+`crons/health/index.js` runs every 30 minutes and once at startup. It probes each credential class **separately** against HoYoverse's own passport API, then reports to **three separate Uptime Kuma push monitors**, one per independently-failing concern:
 
-- All healthy: pushes `status=up`.
-- A credential is dead: pushes `status=down` naming the credential and what stops working.
-- The probe itself failed (timeout, DNS): pushes **nothing**. A missed heartbeat is the right signal for an undecided check, and Kuma tolerates a couple before paging.
+| Concern | Config key | Goes down when |
+| --- | --- | --- |
+| Liveness | `health.kuma.liveness` | the process dies or the cron stops running, whatever the credentials say |
+| Login credential | `health.kuma.ltoken` | `ltoken_v2` is dead, so check-in, Mimo, stamina and reminders stop |
+| Redemption credential | `health.kuma.cookieToken` | `cookie_token_v2` is dead, so code redemption stops |
+
+**Do not collapse these into one monitor.** An aggregate cannot say which thing broke, lets one failure hide behind another's success, and destroys the per-concern "down since" and duration. Liveness in particular must stay independent: it answers "did this process run at all", which no credential probe can see.
+
+Per monitor, each cycle:
+
+- Healthy: pushes `status=up`.
+- Dead: pushes `status=down` naming the credential and what stops working.
+- The probe itself failed (timeout, DNS): pushes **nothing**. A missed heartbeat is the right signal for an undecided check, and Kuma tolerates a couple before paging. Reporting an instrument fault as a dead credential sends you to fix something that was never broken.
 
 Each probe is sent one class's fields alone. This is load-bearing: `verifyLToken` accepts a `cookie_token` and returns OK, so a probe handed the whole cookie would report health it never tested.
 
-Config lives under `health` in `config.json5`. Leave `kumaPushUrl` empty to log results only, which is the right setting for local runs.
+Leave a URL empty to log that concern only, which is the right setting for local runs. A URL that still looks like `$KUMA_...` means someone added it to the config template but not to the Dockerfile's `envsubst` list, and it is treated as unconfigured rather than fetched.
 
-**Set the Kuma monitor's heartbeat interval above the cron's cadence.** Do not copy another monitor's interval, because that decides how hard this hits HoYoverse's API.
+**Set each Kuma monitor's heartbeat interval above the cron's cadence.** Do not copy another monitor's interval, because that decides how hard this hits HoYoverse's API.
 
 ## Testing
 
