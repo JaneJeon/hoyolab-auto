@@ -3,14 +3,20 @@ const CredentialProbe = require("../../object/credential-probe.js");
 const HEARTBEAT_TIMEOUT_MS = 15000;
 
 /**
- * The heartbeat identifies itself honestly instead of inheriting the app's
- * browser User-Agent.
+ * The heartbeat deliberately uses plain fetch and its own User-Agent, instead of
+ * the app's shared got instance.
  *
- * The watchdog sits behind Cloudflare, whose bot rules challenge a request that
- * claims to be Chrome but has a Node TLS fingerprint, and also challenge Node's
- * own default agent. Both got HTTP 403 "Just a moment" from inside the
- * container, while a plain custom agent got 200. A blocked heartbeat means a
- * blind watchdog, so this header is load-bearing, not cosmetic.
+ * The watchdog sits behind Cloudflare. Measured from inside the container:
+ * every got request is challenged with HTTP 403 "Just a moment" no matter which
+ * User-Agent it carries, while fetch succeeds - but only with a non-browser
+ * agent, since fetch carrying the app's spoofed Chrome agent is challenged too.
+ * So both parts matter, and neither is cosmetic. A blocked heartbeat means a
+ * blind watchdog, which is the failure this whole feature exists to prevent.
+ *
+ * The app's got stack is tuned for the HoYoverse APIs (browser User-Agent,
+ * retries, HTTP/2 off, logging hooks). None of that suits a watchdog ping.
+ * The sibling xfinity-outage service pings Kuma with plain fetch for the same
+ * reason.
  */
 const HEARTBEAT_USER_AGENT = "hoyolab-auto-healthcheck";
 
@@ -38,17 +44,14 @@ const pushHeartbeat = async (concern, url, { up, message }) => {
 	target.searchParams.set("msg", message);
 
 	try {
-		const res = await app.Got("API", {
-			url: target.toString(),
+		const res = await fetch(target.toString(), {
 			method: "GET",
-			responseType: "text",
-			throwHttpErrors: false,
 			headers: { "User-Agent": HEARTBEAT_USER_AGENT },
-			timeout: { request: HEARTBEAT_TIMEOUT_MS }
+			signal: AbortSignal.timeout(HEARTBEAT_TIMEOUT_MS)
 		});
 
-		if (res.statusCode !== 200) {
-			app.Logger.error("Cron:Health", `Heartbeat for "${concern}" rejected with HTTP ${res.statusCode}. That watchdog is blind, check its push URL.`);
+		if (res.status !== 200) {
+			app.Logger.error("Cron:Health", `Heartbeat for "${concern}" rejected with HTTP ${res.status}. That watchdog is blind, check its push URL.`);
 			return;
 		}
 
