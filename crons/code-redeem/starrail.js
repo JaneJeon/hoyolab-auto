@@ -22,12 +22,15 @@ const fetchData = async () => {
 		}
 	});
 
+	// null, not [], so the caller can tell a broken source from a quiet day.
+	// Both used to yield [], which made a dead feed look exactly like "no new
+	// codes today" and let redemption stop silently and indefinitely.
 	if (res.statusCode !== 200) {
 		app.Logger.debug("StarRailAPI", {
 			statusCode: res.statusCode
 		});
 
-		return [];
+		return null;
 	}
 
 	const codes = res.body.active;
@@ -37,7 +40,7 @@ const fetchData = async () => {
 			body: res.body
 		});
 
-		return [];
+		return null;
 	}
 
 	return codes.map((i) => ({
