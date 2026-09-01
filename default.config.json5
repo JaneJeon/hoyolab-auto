@@ -13,12 +13,21 @@
     // Credential health checks. The two credential classes in a HoyoLab cookie
     // expire independently, and only code redemption uses cookie_token_v2 - so
     // redemption can be dead for days while everything else looks fine. The
-    // 'health' cron verifies each class and reports the outcome.
+    // 'health' cron verifies each class and reports each to its own monitor.
     health: {
-        // Uptime Kuma push URL. It pings on success and pushes an explicit
-        // 'down' naming the dead credential on failure, so a missing ping and a
-        // known failure both raise an alert. Leave empty to log results only.
-        kumaPushUrl: '',
+        // One Uptime Kuma push monitor per independently-failing concern. An
+        // aggregate monitor cannot say which thing broke, lets one failure hide
+        // behind another's success, and destroys the per-concern "down since"
+        // and duration. Leave a URL empty to log that concern only.
+        kuma: {
+            // Pings whenever the health cron completes, whatever the credentials
+            // say. This is the one that catches a dead or wedged process.
+            liveness: '',
+            // ltoken_v2: daily check-in, Mimo, stamina, reminders.
+            ltoken: '',
+            // cookie_token_v2: code redemption, and nothing else.
+            cookieToken: '',
+        },
     },
     platforms: [
         {
