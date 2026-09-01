@@ -61,6 +61,29 @@ npm run lint # needs devDependencies installed
 
 Unit tests cover the pure logic: cookie parsing, URL redaction, probe classification, and the health cron's up/down/silent decision. There is no test that talks to HoYoverse. To check the real credential, run a probe inside the deployed container (recipe in `Systems/hoyolab-auto` in Craft), never with the cookie on your own machine.
 
+## Running shell commands on Jane's machine
+
+**Use `builtin cd`, never bare `cd`.** Her zsh config redefines `cd` as a
+function that runs `eza -g` afterwards:
+
+```
+builtin cd "$@" && eza -g
+```
+
+`eza` wedges when the Bash tool runs it, and it takes the whole shell with it,
+forever. The command produces no output and never exits. Five commands hung this
+way in one session, sharing nothing but a `cd`: a `python3` heredoc, a `prettier`
+run, a `railway ssh`, and two subagent commands. Absolute paths avoid it
+entirely; `builtin cd` bypasses the function and returns instantly.
+
+The symptom is worth knowing because it misleads: the wedged command looks like
+whatever it was *trying* to do, so it reads as "the heredoc hung" or "railway ssh
+hung". Check the process tree before theorising. `pgrep -P <pid>` on the stuck
+shell shows `eza -g` sitting there.
+
+**`railway logs` streams forever** unless you pass `--lines`, `--since` or
+`--until`. Without one of those it never exits either.
+
 ## Gotchas
 
 - `index.js` shadows the global `Error` with the project's custom class at the top of the file. An `instanceof Error` check therefore excludes native `TypeError` and `SyntaxError`. This is what silently swallowed every crashed cron.
