@@ -196,6 +196,9 @@ const checkAndRedeem = async (codes) => {
 					failed.push({
 						account,
 						code,
+						// Carried so a caller can classify a failure without another
+						// deploy. reason is a localised vendor string, for humans only.
+						retcode: result.retcode,
 						reason: result.reason
 					});
 				}

@@ -79,30 +79,40 @@ const redeemCodes = async (accountData, code) => {
 		});
 	}
 
+	// The retcode is logged and returned, not just branched on. Telling a dead
+	// credential apart from an already-used code needs the number: the vendor's
+	// message is a localised human string, and matching on it is the antipattern
+	// that makes Mimo's credential detection unreliable. Nobody has recorded
+	// which retcodes this endpoint actually returns, so logging it is what
+	// builds that inventory out of real traffic.
 	const retcode = res.body.retcode;
 	if (retcode === -2001 || retcode === -2003) {
 		app.Logger.log(`CodeRedeem:StarRail:${accountData.uid}`, {
 			code: code.code,
+			retcode,
 			message: "Expired or invalid code"
 		});
 
 		return {
 			success: false,
+			retcode,
 			reason: "Expired or invalid code"
 		};
 	}
 
 	if (retcode !== 0) {
-		app.Logger.info(`CodeRedeem:StarRail:${accountData.uid}`, `${code.code} - ${res.body.message}`);
+		app.Logger.info(`CodeRedeem:StarRail:${accountData.uid}`, `${code.code} - retcode ${retcode}: ${res.body.message}`);
 		return {
 			success: false,
+			retcode,
 			reason: res.body.message
 		};
 	}
 
 	app.Logger.info(`CodeRedeem:StarRail:${accountData.uid}`, `${code.code} - Redeemed`);
 	return {
-		success: true
+		success: true,
+		retcode
 	};
 };
 
