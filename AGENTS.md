@@ -63,26 +63,17 @@ Unit tests cover the pure logic: cookie parsing, URL redaction, probe classifica
 
 ## Running shell commands on Jane's machine
 
-**Use `builtin cd`, never bare `cd`.** Her zsh config redefines `cd` as a
-function that runs `eza -g` afterwards:
+**Never write a bare `cd`. Use `builtin cd`.** A bare `cd` hangs the command
+forever with no output, because of her global zsh config rather than anything in
+this repo.
 
-```
-builtin cd "$@" && eza -g
-```
+That is a machine-level fact, not a fork one, so it lives in the shared Craft
+memory where every repo's agents can find it: `Systems/Jane's shell setup — the
+traps that hang agent commands`. It has the evidence, the one-command check that
+identifies it, and why the symptom misleads.
 
-`eza` wedges when the Bash tool runs it, and it takes the whole shell with it,
-forever. The command produces no output and never exits. Five commands hung this
-way in one session, sharing nothing but a `cd`: a `python3` heredoc, a `prettier`
-run, a `railway ssh`, and two subagent commands. Absolute paths avoid it
-entirely; `builtin cd` bypasses the function and returns instantly.
-
-The symptom is worth knowing because it misleads: the wedged command looks like
-whatever it was *trying* to do, so it reads as "the heredoc hung" or "railway ssh
-hung". Check the process tree before theorising. `pgrep -P <pid>` on the stuck
-shell shows `eza -g` sitting there.
-
-**`railway logs` streams forever** unless you pass `--lines`, `--since` or
-`--until`. Without one of those it never exits either.
+`railway logs` also streams forever unless you pass `--lines`, `--since` or
+`--until`.
 
 ## Gotchas
 
