@@ -10,8 +10,8 @@ module.exports = class RealtimeNotes {
 		this.#color = options.color;
 	}
 
-	async notes (accountData) {
-		const cachedData = await this.#instance.dataCache.get(accountData.uid);
+	async notes (accountData, options = {}) {
+		const cachedData = options.fresh === true ? null : await this.#instance.dataCache.get(accountData.uid);
 
 		const { threshold } = accountData.stamina;
 		if (cachedData && cachedData.stamina.currentStamina < threshold) {
@@ -36,6 +36,7 @@ module.exports = class RealtimeNotes {
 			]
 		});
 
+		const observedAt = app.Date.now();
 		const res = await app.Got("HoYoLab", {
 			url: this.#instance.config.url.notes,
 			responseType: "json",
@@ -125,6 +126,7 @@ module.exports = class RealtimeNotes {
 
 		return {
 			success: true,
+			observedAt,
 			data: {
 				stamina,
 				dailies,

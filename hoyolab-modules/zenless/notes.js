@@ -10,8 +10,8 @@ module.exports = class RealtimeNotes {
 		this.#color = options.color;
 	}
 
-	async notes (accountData) {
-		const cachedData = await this.#instance.dataCache.get(accountData.uid);
+	async notes (accountData, options = {}) {
+		const cachedData = options.fresh === true ? null : await this.#instance.dataCache.get(accountData.uid);
 
 		const { threshold } = accountData.stamina;
 		if (cachedData && cachedData.stamina.currentStamina < threshold) {
@@ -36,6 +36,7 @@ module.exports = class RealtimeNotes {
 			]
 		});
 
+		const observedAt = app.Date.now();
 		const res = await app.Got("HoYoLab", {
 			url: this.#instance.config.url.notes,
 			responseType: "json",
@@ -85,7 +86,9 @@ module.exports = class RealtimeNotes {
 		}
 
 		// Howl daily scratch card.
-		const cardSign = (data.card_sign && data.card_sign === "CardSignDone") ? "Completed" : "Not Completed";
+		const cardSign = typeof data.card_sign === "string" && data.card_sign.length > 0
+			? (data.card_sign === "CardSignDone" ? "Completed" : "Not Completed")
+			: "Unknown";
 
 		const stamina = data.energy
 			? { currentStamina: data.energy.progress?.current ?? 0, maxStamina: data.energy.progress?.max ?? 0, recoveryTime: data.energy.restore ?? 0 }
@@ -138,6 +141,7 @@ module.exports = class RealtimeNotes {
 
 		return {
 			success: true,
+			observedAt,
 			data: {
 				cardSign,
 				stamina,

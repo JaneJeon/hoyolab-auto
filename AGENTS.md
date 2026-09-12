@@ -52,7 +52,31 @@ Leave a URL empty to log that concern only, which is the right setting for local
 
 **Set each Kuma monitor's heartbeat interval above the cron's cadence.** Do not copy another monitor's interval, because that decides how hard this hits HoYoverse's API.
 
-## Testing
+## Notification contract
+
+All unsolicited messages use `dispatchNotification(NotificationClass.Action|Receipt, payload, account?)`.
+Action means Jane still has something to do; Receipt means the bot reports what it did,
+including failures. Split mixed reports before dispatch. Never infer class from message text.
+`notificationClasses` selects message purpose; account `allowedPlatforms` independently
+restricts destinations. Commands reply once through their originating platform/chat and
+do not broadcast through this dispatcher. Operational health stays in its independent Kuma monitors.
+
+With `reminders.enabled`, the deadline coordinator replaces legacy daily, scratch-card,
+and stamina crons; configured `weeklyOffsets` also replaces the legacy weekly cron.
+Each account uses its game server's fixed 04:00 reset (Monday for weeklies), never the
+process timezone. Daily offsets are `[20,12,7,4,2]` hours before reset. Derive weekly
+offsets from the remaining workload. Display timezones never suppress notifications.
+Live completion evidence bypasses the notes cache. Missing, stale, malformed, or
+previous-period progress is unknown, not resolved. `/tasks` reads the current snapshot.
+Durable state is `/app/data/reminders.json`: serialized atomic replacement with fsync;
+malformed state fails closed. Commit a delivered rung only after transport acceptance.
+A crash between remote acceptance and the disk commit can still duplicate one message.
+Delivery must succeed at all selected destinations before a rung is committed; a partial
+multi-destination failure can repeat at the destinations that already accepted it.
+Stamina threshold/full events have separate durable latches and re-arm after spending.
+On an initial observation at full, Full subsumes the threshold message to avoid two pings.
+
+## Test commands
 
 ```bash
 npm test     # node:test, no dependencies
@@ -78,7 +102,7 @@ identifies it, and why the symptom misleads.
 ## Gotchas
 
 - `index.js` shadows the global `Error` with the project's custom class at the top of the file. An `instanceof Error` check therefore excludes native `TypeError` and `SyntaxError`. This is what silently swallowed every crashed cron.
-- `crons/index.js` registers jobs as `() => cron.code(cron)` and drops the returned promise, so a rejected cron never fails visibly. The process-level handlers are the only net, and they are registered at the very end of startup, so a failure *during* startup bypasses them and crashes.
+- `crons/index.js` callbacks still rely on the process-level rejection handlers for visibility. Cron registration now happens after account/platform initialization and those handlers, so scheduled jobs cannot enter partially initialized application state.
 - Cookie values are base64-ish and can contain `=`. Split pairs on the **first** `=` only. `object/cookie.js` does this for both callers.
 - `hoyolab-modules/template.js` has two cookie parsers: the static `parseCookie` and the private `#parseCookie`. They had drifted apart, which is how a single leading space in a pasted secret disabled redemption.
 - **There is no automatic cookie refresh, and there cannot be one.** Upstream ships `crons/update-cookie/`, deleted from this fork on 2026-09-01. Its endpoint, `fetch_cookie_accountinfo`, was retired by HoYoverse and answers `-707` for every input. Even had it worked it wrote the v1 field names `cookie_token`/`account_id`, which redemption does not read, and only mutated an in-memory array that the next restart discards. Rotation is manual, always. Any plan starting "fix the cookie refresh cron" is dead on arrival, and re-porting it from upstream would restore three separate faults.

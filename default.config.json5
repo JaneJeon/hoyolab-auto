@@ -10,6 +10,14 @@
     testNotification: {
         enabled: false, // Set to false if you don't want to receive test notifications on startup
     },
+    // Opt in to fresh, durable deadline reminders. Replaces the legacy daily,
+    // scratch-card and stamina crons; weeklyOffsets also replaces weeklies.
+    reminders: {
+        enabled: false,
+        dailyOffsets: [20, 12, 7, 4, 2], // Hours before this account's 04:00 reset
+        // weeklyOffsets: [...], // Derive from the workload; Monday 04:00 reset
+        displayTimezones: ['America/Los_Angeles', 'America/New_York', 'Asia/Seoul'],
+    },
     // Credential health checks. The two credential classes in a HoyoLab cookie
     // expire independently, and only code redemption uses cookie_token_v2 - so
     // redemption can be dead for days while everything else looks fine. The
@@ -41,6 +49,8 @@
             id: 2,
             active: false, // Set to true if you want to enable a Telegram bot to receive notifications and issue commands
             type: 'telegram',
+			// Route by message class. Omit this field to receive both classes.
+			notificationClasses: ['Action', 'Receipt'],
             chatId: 123, // You can follow this guide to create a bot: https://github.com/torikushiii/hoyolab-auto/blob/main/setup/TELEGRAM.md
             token: '(YOUR_TELEGRAM_BOT_TOKEN)',
             disableNotification: false, // Set to true if you want to disable notification for Telegram bot (sounds, vibration, etc.)
