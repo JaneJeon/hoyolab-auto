@@ -86,23 +86,28 @@ module.exports = class RealtimeNotes {
 		}
 
 		// Howl daily scratch card.
-		const cardSign = typeof data.card_sign === "string" && data.card_sign.length > 0
-			? (data.card_sign === "CardSignDone" ? "Completed" : "Not Completed")
-			: "Unknown";
+		const cardSign = data.card_sign === "CardSignDone"
+			? "Completed"
+			: (data.card_sign === "CardSignNo" ? "Not Completed" : "Unknown");
 
 		const stamina = data.energy
-			? { currentStamina: data.energy.progress?.current ?? 0, maxStamina: data.energy.progress?.max ?? 0, recoveryTime: data.energy.restore ?? 0 }
+			? { currentStamina: data.energy.progress?.current, maxStamina: data.energy.progress?.max, recoveryTime: data.energy.restore }
 			: null;
 
 		const dailies = data.vitality
-			? { task: data.vitality.current ?? 0, maxTask: data.vitality.max ?? 0 }
+			? { task: data.vitality.current, maxTask: data.vitality.max }
 			: null;
 
 		const weeklies = {
-			bounty: data.bounty_commission?.num ?? 0,
-			bountyTotal: data.bounty_commission?.total ?? 0,
-			surveyPoints: data.survey_points?.num ?? 0,
-			surveyPointsTotal: data.survey_points?.total ?? 0
+			bounty: data.bounty_commission?.num,
+			bountyTotal: data.bounty_commission?.total,
+			bountyUnlocked: data.bounty_commission?.unlock,
+			bountyHidden: data.bounty_commission?.hide,
+			// Weekly Investigation Points ended with the 1.4 Lost Void transition.
+			// https://www.hoyolab.com/article/35654082
+			weeklyTaskPoints: data.weekly_task?.cur_point,
+			weeklyTaskTarget: data.weekly_task?.max_point,
+			weeklyTaskUnlocked: data.weekly_task?.unlock
 		};
 
 		const ShopState = {

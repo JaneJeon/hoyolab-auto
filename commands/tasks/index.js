@@ -23,6 +23,16 @@ const renderAccount = ({ account, snapshot, now, timezones }) => {
 		}
 		outstanding++;
 		lines.push(`${labels[key] ?? key}: ${status === "pending" ? "unfinished" : "unknown"}`);
+		for (const component of task.components ?? []) {
+			const componentStatus = stale || snapshot.lastFailure || expired ? "unknown" : component.status;
+			if (componentStatus === "resolved") {
+				continue;
+			}
+			const progress = componentStatus === "pending"
+				? `${component.current}/${component.target}`
+				: "unknown";
+			lines.push(`• ${component.label}: ${progress}`);
+		}
 		if (expired) {
 			lines.push("Waiting for evidence for the new period.");
 		}

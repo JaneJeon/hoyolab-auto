@@ -76,6 +76,16 @@ multi-destination failure can repeat at the destinations that already accepted i
 Stamina threshold/full events have separate durable latches and re-arm after spending.
 On an initial observation at full, Full subsumes the threshold message to avoid two pings.
 
+Weekly obligations follow current game mechanics, not the number of API fields.
+HSR has Echo of War and one Cyclical Points track (`period_score/period_max_score`):
+[Version 4.2 merged SU, DU and Currency Wars rewards](https://www.hoyolab.com/article/44548609).
+ZZZ has Lost Void Bounty and Ridu Weekly (`weekly_task`);
+[Version 1.4 removed the old Investigation Points weekly limit](https://www.hoyolab.com/article/35654082).
+Do not invent an unresolved weekly obligation from `survey_points: null`, or turn
+legacy HSR mode counters into separate tasks. Among actual obligations, any proven
+pending component keeps the aggregate pending; all must be resolved or explicitly
+inapplicable before it resolves. Positive score targets allow progress above target.
+
 ## Test commands
 
 ```bash

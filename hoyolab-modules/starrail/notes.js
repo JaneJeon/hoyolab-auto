@@ -103,7 +103,11 @@ module.exports = class RealtimeNotes {
 			maxScore: data.max_rogue_score,
 			tournScore: data.rogue_tourn_weekly_cur,
 			tournMaxScore: data.rogue_tourn_weekly_max,
-			tournUnlocked: data.rogue_tourn_weekly_unlocked
+			tournUnlocked: data.rogue_tourn_weekly_unlocked,
+			// Since 4.2, SU (including DU) and Currency Wars feed one weekly track.
+			// https://www.hoyolab.com/article/44548609
+			periodScore: data.period_score,
+			periodScoreTarget: data.period_max_score
 		};
 
 		await this.#instance.dataCache.set(accountData.uid, {

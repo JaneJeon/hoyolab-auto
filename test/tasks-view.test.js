@@ -38,3 +38,27 @@ test("task view shows pending work in display zones and delivery uncertainty ind
 	assert.match(text, /2:00 AM PDT/);
 	assert.match(text, /6:00 PM/);
 });
+
+test("weekly view identifies unfinished components and retains uncertainty for missing evidence", () => {
+	const now = Date.parse("2026-09-12T02:00:00Z");
+	const input = {
+		account: { platform: "nap", uid: "test" },
+		now,
+		timezones: ["UTC"],
+		snapshot: { observedAt: now,
+			tasks: { weeklies: {
+				status: "pending",
+				deadline: "2026-09-14T09:00:00Z",
+				components: [
+					{ label: "Lost Void Bounty", status: "unknown" },
+					{ label: "Ridu Weekly", status: "pending", current: 1050, target: 2100 }
+				]
+			} } }
+	};
+	const fresh = renderAccount(input);
+	assert.match(fresh, /Ridu Weekly: 1050\/2100/);
+	assert.match(fresh, /Lost Void Bounty: unknown/);
+	const stale = renderAccount({ ...input, now: now + 6 * 60_000 });
+	assert.match(stale, /Ridu Weekly: unknown/);
+	assert.doesNotMatch(stale, /1050\/2100/);
+});
