@@ -27,50 +27,81 @@ const validProgress = (current, maximum) => typeof current === "number"
 	&& typeof maximum === "number" && Number.isFinite(current)
 	&& Number.isFinite(maximum) && maximum > 0 && current >= 0 && current <= maximum;
 
+const validTargetProgress = (current, target) => typeof current === "number"
+	&& typeof target === "number" && Number.isFinite(current)
+	&& Number.isFinite(target) && target > 0 && current >= 0;
+
+const aggregateCompletion = statuses => statuses.includes(COMPLETION.PENDING)
+	? COMPLETION.PENDING
+	: (statuses.length > 0 && statuses.every(status => status === COMPLETION.RESOLVED)
+		? COMPLETION.RESOLVED
+		: COMPLETION.UNKNOWN);
+
 const freshStatus = (status, observedAt, now, period) => observedAt >= period.startAt.getTime()
 	&& observedAt <= now && now - observedAt <= TWO_MINUTES
 	? status
 	: COMPLETION.UNKNOWN;
 
-const weeklyCompletion = (type, weeklies) => {
-	if (!weeklies || typeof weeklies !== "object") {
-		return COMPLETION.UNKNOWN;
+const targetComponent = (label, current, target, applicable) => {
+	let status = COMPLETION.UNKNOWN;
+	if (applicable === false) {
+		status = COMPLETION.RESOLVED;
 	}
-	if (type === "starrail") {
-		if (typeof weeklies.tournUnlocked !== "boolean") {
-			return COMPLETION.UNKNOWN;
-		}
-		const bossValid = validProgress(weeklies.weeklyBoss, weeklies.weeklyBossLimit);
-		const rogueValid = validProgress(weeklies.rogueScore, weeklies.maxScore);
-		if (!bossValid || !rogueValid) {
-			return COMPLETION.UNKNOWN;
-		}
-		const results = [Number(weeklies.weeklyBoss) === 0, Number(weeklies.rogueScore) === Number(weeklies.maxScore)];
-		if (weeklies.tournUnlocked === true) {
-			if (!validProgress(weeklies.tournScore, weeklies.tournMaxScore)) {
-				return COMPLETION.UNKNOWN;
-			}
-			results.push(Number(weeklies.tournScore) === Number(weeklies.tournMaxScore));
-		}
-		return results.every(Boolean) ? COMPLETION.RESOLVED : COMPLETION.PENDING;
+	else if (applicable === true && validTargetProgress(current, target)) {
+		status = current >= target ? COMPLETION.RESOLVED : COMPLETION.PENDING;
 	}
-	if (type === "nap") {
-		if (!validProgress(weeklies.bounty, weeklies.bountyTotal)
-			|| !validProgress(weeklies.surveyPoints, weeklies.surveyPointsTotal)) {
-			return COMPLETION.UNKNOWN;
-		}
-		return Number(weeklies.bounty) === Number(weeklies.bountyTotal)
-			&& Number(weeklies.surveyPoints) === Number(weeklies.surveyPointsTotal)
-			? COMPLETION.RESOLVED
-			: COMPLETION.PENDING;
-	}
-	if (type === "genshin") {
-		return validProgress(weeklies.resinDiscount, weeklies.resinDiscountLimit)
-			? (Number(weeklies.resinDiscount) === 0 ? COMPLETION.RESOLVED : COMPLETION.PENDING)
-			: COMPLETION.UNKNOWN;
-	}
-	return COMPLETION.UNKNOWN;
+	return { label, current, target, applicable, status };
 };
+
+const weeklyDetails = (type, weeklies) => {
+	if (!weeklies || typeof weeklies !== "object") {
+		return { status: COMPLETION.UNKNOWN, components: []};
+	}
+	let components = [];
+	if (type === "starrail") {
+		components = [
+			{
+				label: "Echo of War",
+				current: validProgress(weeklies.weeklyBoss, weeklies.weeklyBossLimit)
+					? weeklies.weeklyBossLimit - weeklies.weeklyBoss
+					: weeklies.weeklyBoss,
+				target: weeklies.weeklyBossLimit,
+				status: validProgress(weeklies.weeklyBoss, weeklies.weeklyBossLimit)
+					? (weeklies.weeklyBoss === 0 ? COMPLETION.RESOLVED : COMPLETION.PENDING)
+					: COMPLETION.UNKNOWN
+			},
+			// 4.2 merged SU (including DU) and Currency Wars into this one track.
+			// https://www.hoyolab.com/article/44548609
+			targetComponent("Cyclical Points", weeklies.periodScore, weeklies.periodScoreTarget, true)
+		];
+	}
+	else if (type === "nap") {
+		const bountyApplicable = weeklies.bountyUnlocked === false || weeklies.bountyHidden === true
+			? false
+			: (weeklies.bountyUnlocked === true && weeklies.bountyHidden === false ? true : undefined);
+		components = [
+			targetComponent("Lost Void Bounty", weeklies.bounty, weeklies.bountyTotal, bountyApplicable),
+			// 1.4 removed weekly Investigation Points; they are not another task.
+			// https://www.hoyolab.com/article/35654082
+			targetComponent("Ridu Weekly", weeklies.weeklyTaskPoints, weeklies.weeklyTaskTarget, weeklies.weeklyTaskUnlocked)
+		];
+	}
+	else if (type === "genshin") {
+		components = [{
+			label: "Weekly Boss Discounts",
+			current: validProgress(weeklies.resinDiscount, weeklies.resinDiscountLimit)
+				? weeklies.resinDiscountLimit - weeklies.resinDiscount
+				: weeklies.resinDiscount,
+			target: weeklies.resinDiscountLimit,
+			status: validProgress(weeklies.resinDiscount, weeklies.resinDiscountLimit)
+				? (weeklies.resinDiscount === 0 ? COMPLETION.RESOLVED : COMPLETION.PENDING)
+				: COMPLETION.UNKNOWN
+		}];
+	}
+	return { status: aggregateCompletion(components.map(({ status }) => status)), components };
+};
+
+const weeklyCompletion = (type, weeklies) => weeklyDetails(type, weeklies).status;
 
 const sendAction = async (account, data, title, description, fields = []) => {
 	const region = app.HoyoLab.getRegion(account.region);
@@ -117,7 +148,9 @@ const evaluateTask = async ({ state, account, data, now, task, period, offsets, 
 	if (outcome.rung === null) {
 		return;
 	}
-	await deliver(account, data, `${task} Reminder (T-${outcome.rung}h)`, description, fields);
+	const minutesRemaining = Math.max(0, Math.ceil((period.resetAt.getTime() - now) / 60_000));
+	const remaining = `${Math.floor(minutesRemaining / 60)}h ${minutesRemaining % 60}m`;
+	await deliver(account, data, `${task} Reminder`, `${description}\nReset in ${remaining} (${period.resetAt.toISOString().replace("T", " ").replace(".000Z", " UTC")}).`, fields);
 	await state.commitDelivery(outcome.delivery);
 };
 
@@ -184,7 +217,12 @@ const runAccount = async (account, reminders, state, { store = cacheAdapter, del
 			? COMPLETION.RESOLVED
 			: (data.cardSign === "Not Completed" ? COMPLETION.PENDING : COMPLETION.UNKNOWN), observedAt, now, dailyPeriod)
 		: null;
-	const weeklyStatus = freshStatus(weeklyCompletion(platform.type, data.weeklies), observedAt, now, weeklyPeriod);
+	const weekly = weeklyDetails(platform.type, data.weeklies);
+	const weeklyStatus = freshStatus(weekly.status, observedAt, now, weeklyPeriod);
+	const weeklyComponents = weekly.components.map(component => ({
+		...component,
+		status: freshStatus(component.status, observedAt, now, weeklyPeriod)
+	}));
 	const snapshot = {
 		observedAt,
 		lastAttemptAt: now,
@@ -217,6 +255,7 @@ const runAccount = async (account, reminders, state, { store = cacheAdapter, del
 			period: weeklyPeriod.id,
 			deadline: weeklyPeriod.resetAt.toISOString(),
 			status: weeklyStatus,
+			components: weeklyComponents,
 			deliveryFailure: null
 		};
 	}
@@ -327,5 +366,6 @@ module.exports = {
 	runAccount,
 	reminderStore,
 	serverOffset,
-	weeklyCompletion
+	weeklyCompletion,
+	weeklyDetails
 };

@@ -1,3 +1,11 @@
+const formatProgress = (current, target) => Number.isFinite(current) && Number.isFinite(target) && target > 0
+	? `${current}/${target}`
+	: "Unknown";
+
+const formatDuration = seconds => Number.isFinite(seconds) && seconds >= 0
+	? app.Utils.formatTime(seconds)
+	: "Unknown";
+
 const getNotesEmbedData = async (accounts, game, platformName) => {
 	const embedData = [];
 	const telegramMessages = [];
@@ -28,8 +36,8 @@ const getNotesEmbedData = async (accounts, game, platformName) => {
 				fields: [
 					{
 						name: `Current Stamina:`,
-						value: `${currentStamina}/${stamina.maxStamina}`
-						+ `\nFull in:\n${app.Utils.formatTime(stamina.recoveryTime)}`,
+						value: `${formatProgress(currentStamina, stamina.maxStamina)}`
+						+ `\nFull in:\n${formatDuration(stamina.recoveryTime)}`,
 						inline: true
 					}
 				],
@@ -49,7 +57,7 @@ const getNotesEmbedData = async (accounts, game, platformName) => {
 				embed.fields.push(
 					{
 						name: "Dailies",
-						value: `${task}/${maxTask}`,
+						value: formatProgress(task, maxTask),
 						inline: true
 					},
 					{
@@ -59,13 +67,12 @@ const getNotesEmbedData = async (accounts, game, platformName) => {
 					},
 					{
 						name: "Weekly Boss:",
-						value: `${weeklies.resinDiscount}/${weeklies.resinDiscountLimit}`,
+						value: formatProgress(weeklies.resinDiscount, weeklies.resinDiscountLimit),
 						inline: true
 					},
 					{
 						name: "Realm Currency",
-						value: `${realm.currentCoin}/${realm.maxCoin}`
-						+ `\nCapped in: ${app.Utils.formatTime(realm.recoveryTime)}`,
+						value: `${formatProgress(realm.currentCoin, realm.maxCoin)}\nCapped in: ${app.Utils.formatTime(realm.recoveryTime)}`,
 						inline: true
 					},
 					{
@@ -79,13 +86,13 @@ const getNotesEmbedData = async (accounts, game, platformName) => {
 				embed.fields.push(
 					{
 						name: "Dailies",
-						value: `${dailies.task}/${dailies.maxTask}`,
+						value: formatProgress(dailies.task, dailies.maxTask),
 						inline: true
 					},
 					{
 						name: "Weekly Status:",
-						value: `Boss: ${weeklies.weeklyBoss}/${weeklies.weeklyBossLimit}`
-						+ `\nSimulated Universe: ${weeklies.rogueScore}/${weeklies.maxScore}`,
+						value: `Echo of War claims remaining: ${formatProgress(weeklies.weeklyBoss, weeklies.weeklyBossLimit)}`
+							+ `\nCyclical Points: ${formatProgress(weeklies.periodScore, weeklies.periodScoreTarget)}`,
 						inline: false
 					},
 					{
@@ -94,16 +101,12 @@ const getNotesEmbedData = async (accounts, game, platformName) => {
 						inline: true
 					}
 				);
-
-				if (weeklies.tournUnlocked) {
-					embed.fields[2].value += `\nDivergent Universe: ${weeklies.tournScore}/${weeklies.tournMaxScore}`;
-				}
 			}
 			else if (platform.gameId === 8) {
 				embed.fields.push(
 					{
 						name: "Dailies",
-						value: `${dailies.task}/${dailies.maxTask}`,
+						value: formatProgress(dailies.task, dailies.maxTask),
 						inline: true
 					},
 					{
@@ -113,8 +116,8 @@ const getNotesEmbedData = async (accounts, game, platformName) => {
 					},
 					{
 						name: "Weeklies",
-						value: `Bounty Commission: ${weeklies.bounty}/${weeklies.bountyTotal}`
-						+ `\nSurvey Points: ${weeklies.surveyPoints}/${weeklies.surveyPointsTotal}`,
+						value: `Lost Void Bounty: ${formatProgress(weeklies.bounty, weeklies.bountyTotal)}`
+							+ `\nRidu Weekly: ${formatProgress(weeklies.weeklyTaskPoints, weeklies.weeklyTaskTarget)}`,
 						inline: true
 					},
 					{
@@ -137,41 +140,37 @@ const getNotesEmbedData = async (accounts, game, platformName) => {
 				const currentStamina = Math.floor(stamina.currentStamina);
 				message = [
 					`${account.nickname} - ${account.uid}`,
-					`Current Stamina: ${currentStamina}/${stamina.maxStamina}`
-					+ `\nFull in: ${app.Utils.formatTime(stamina.recoveryTime)}`,
+					`Current Stamina: ${formatProgress(currentStamina, stamina.maxStamina)}`
+					+ `\nFull in: ${formatDuration(stamina.recoveryTime)}`,
 					"Expedition Status",
 					expedition.list.map((i, idx) => `Account ${idx + 1} - ${app.Utils.formatTime(i.remaining_time)}`).join("\n"),
-					`Dailies: ${task}/${maxTask}`,
+					`Dailies: ${formatProgress(task, maxTask)}`,
 					`Stored Attendance: ${storedAttendance}`,
 					`Refresh in: ${app.Utils.formatTime(storedAttendanceRefresh)}`,
-					`Weekly Boss Chance Remaining: ${weeklies.resinDiscount}/${weeklies.resinDiscountLimit}`
+					`Weekly Boss Chance Remaining: ${formatProgress(weeklies.resinDiscount, weeklies.resinDiscountLimit)}`
 				].join("\n");
 			}
 			else if (platform.gameId === 6) {
 				message = [
 					`${account.nickname} - ${account.uid}`,
-					`Current Stamina: ${stamina.currentStamina}/${stamina.maxStamina}`
-					+ `\nFull in: ${app.Utils.formatTime(stamina.recoveryTime)}`,
+					`Current Stamina: ${formatProgress(stamina.currentStamina, stamina.maxStamina)}`
+					+ `\nFull in: ${formatDuration(stamina.recoveryTime)}`,
 					"Expedition Status",
 					expedition.list.map((i, idx) => `Account ${idx + 1} - ${app.Utils.formatTime(i.remaining_time)}`).join("\n"),
-					`Dailies: ${dailies.task}/${dailies.maxTask}`,
+					`Dailies: ${formatProgress(dailies.task, dailies.maxTask)}`,
 					"Weekly Status:",
-					`Boss: ${weeklies.weeklyBoss}/${weeklies.weeklyBossLimit}`
-					+ `\nSimulated Universe: ${weeklies.rogueScore}/${weeklies.maxScore}`
+					`Echo of War claims remaining: ${formatProgress(weeklies.weeklyBoss, weeklies.weeklyBossLimit)}`
+					+ `\nCyclical Points: ${formatProgress(weeklies.periodScore, weeklies.periodScoreTarget)}`
 				].join("\n");
-
-				if (weeklies.tournUnlocked) {
-					message += `\nDivergent Universe: ${weeklies.tournScore}/${weeklies.tournMaxScore}`;
-				}
 			}
 			else if (platform.gameId === 8) {
 				message = [
 					`${account.nickname} - ${account.uid}`,
-					`Current Stamina: ${stamina.currentStamina}/${stamina.maxStamina}`
-					+ `\nFull in: ${app.Utils.formatTime(stamina.recoveryTime)}`,
-					`Dailies: ${dailies.task}/${dailies.maxTask}`,
-					`Bounty Commission: ${weeklies.bounty}/${weeklies.bountyTotal}`,
-					`Survey Points: ${weeklies.surveyPoints}/${weeklies.surveyPointsTotal}`,
+					`Current Stamina: ${formatProgress(stamina.currentStamina, stamina.maxStamina)}`
+					+ `\nFull in: ${formatDuration(stamina.recoveryTime)}`,
+					`Dailies: ${formatProgress(dailies.task, dailies.maxTask)}`,
+					`Lost Void Bounty: ${formatProgress(weeklies.bounty, weeklies.bountyTotal)}`,
+					`Ridu Weekly: ${formatProgress(weeklies.weeklyTaskPoints, weeklies.weeklyTaskTarget)}`,
 					`Shop Status: ${data.shop.state}`,
 					`Howl Scratch Card: ${data.cardSign}`
 				].join("\n");

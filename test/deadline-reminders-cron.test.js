@@ -4,7 +4,7 @@ const test = require("node:test");
 const { COMPLETION } = require("../object/deadline-reminder.js");
 const ReminderState = require("../object/reminder-state.js");
 const HoyoDate = require("../object/date.js");
-const { runAccount, weeklyCompletion } = require("../crons/deadline-reminders/index.js");
+const { runAccount, weeklyCompletion, weeklyDetails } = require("../crons/deadline-reminders/index.js");
 
 test("weekly completion only resolves supported valid counters", () => {
 	assert.equal(weeklyCompletion("starrail", {
@@ -16,11 +16,53 @@ test("weekly completion only resolves supported valid counters", () => {
 	assert.equal(weeklyCompletion("starrail", {
 		weeklyBoss: 0,
 		weeklyBossLimit: 3,
+		rogueScore: 18_000,
+		maxScore: 18_000,
+		tournUnlocked: true,
+		tournScore: 18_000,
+		tournMaxScore: 1000,
+		gridFightScore: 18_000,
+		gridFightTarget: 18_000,
+		periodScore: 18_000,
+		periodScoreTarget: 18_000
+	}), COMPLETION.RESOLVED);
+	assert.deepEqual(weeklyDetails("starrail", {
+		weeklyBoss: 0,
+		weeklyBossLimit: 3,
+		rogueScore: 0,
+		maxScore: 18_000,
+		tournUnlocked: true,
+		tournScore: 0,
+		tournMaxScore: 1000,
+		gridFightScore: 0,
+		gridFightTarget: 18_000,
+		periodScore: 18_000,
+		periodScoreTarget: 18_000
+	}), {
+		status: COMPLETION.RESOLVED,
+		components: [
+			{ label: "Echo of War", current: 3, target: 3, status: COMPLETION.RESOLVED },
+			{ label: "Cyclical Points", current: 18_000, target: 18_000, applicable: true, status: COMPLETION.RESOLVED }
+		]
+	});
+	assert.equal(weeklyCompletion("starrail", {
+		weeklyBoss: 2,
+		weeklyBossLimit: 3,
+		rogueScore: 14_000,
+		maxScore: 14_000
+	}), COMPLETION.PENDING);
+	assert.equal(weeklyCompletion("starrail", {
+		weeklyBoss: 0,
+		weeklyBossLimit: 3,
 		rogueScore: 14_000,
 		maxScore: 14_000,
 		tournUnlocked: false,
 		tournScore: 0,
-		tournMaxScore: 0
+		tournMaxScore: 0,
+		gridFightScore: 14_000,
+		gridFightTarget: 14_000,
+		periodScore: 14_000,
+		periodScoreTarget: 14_000
 	}), COMPLETION.RESOLVED);
 	assert.equal(weeklyCompletion("starrail", {
 		weeklyBoss: 0,
@@ -33,13 +75,56 @@ test("weekly completion only resolves supported valid counters", () => {
 	}), COMPLETION.UNKNOWN);
 	assert.equal(weeklyCompletion("nap", {
 		bounty: 0,
-		bountyTotal: 0,
+		bountyTotal: 8000,
+		bountyUnlocked: true,
+		bountyHidden: false,
 		surveyPoints: 0,
-		surveyPointsTotal: 0
-	}), COMPLETION.UNKNOWN);
+		surveyPointsTotal: 0,
+		weeklyTaskPoints: 1050,
+		weeklyTaskTarget: 2100,
+		weeklyTaskUnlocked: true
+	}), COMPLETION.PENDING);
+	assert.equal(weeklyCompletion("nap", {
+		bounty: 8000,
+		bountyTotal: 8000,
+		bountyUnlocked: true,
+		bountyHidden: false,
+		surveyPoints: 0,
+		surveyPointsTotal: 0,
+		weeklyTaskPoints: 2100,
+		weeklyTaskTarget: 2100,
+		weeklyTaskUnlocked: true
+	}), COMPLETION.RESOLVED);
+	assert.equal(weeklyCompletion("nap", {
+		bounty: 8000,
+		bountyTotal: 8000,
+		bountyUnlocked: true,
+		bountyHidden: false,
+		surveyPoints: 4,
+		surveyPointsTotal: 4,
+		weeklyTaskPoints: 2100,
+		weeklyTaskTarget: 2100,
+		weeklyTaskUnlocked: true
+	}), COMPLETION.RESOLVED);
+	assert.equal(weeklyCompletion("nap", {}), COMPLETION.UNKNOWN);
 	assert.equal(weeklyCompletion("genshin", {
 		resinDiscount: 0, resinDiscountLimit: 3
 	}), COMPLETION.RESOLVED);
+	assert.deepEqual(weeklyDetails("nap", {
+		bounty: 0,
+		bountyTotal: 8000,
+		bountyUnlocked: true,
+		bountyHidden: false,
+		weeklyTaskPoints: 1050,
+		weeklyTaskTarget: 2100,
+		weeklyTaskUnlocked: true
+	}), {
+		status: COMPLETION.PENDING,
+		components: [
+			{ label: "Lost Void Bounty", current: 0, target: 8000, applicable: true, status: COMPLETION.PENDING },
+			{ label: "Ridu Weekly", current: 1050, target: 2100, applicable: true, status: COMPLETION.PENDING }
+		]
+	});
 });
 
 test("one delivery failure preserves the full snapshot and does not stop later tasks", async (t) => {
@@ -75,14 +160,15 @@ test("one delivery failure preserves the full snapshot and does not stop later t
 	};
 	await runAccount(account, { dailyOffsets: [20]}, new ReminderState(store), {
 		store,
-		deliver: async (_account, _data, title) => {
-			deliveries.push(title);
+		deliver: async (_account, _data, title, description) => {
+			deliveries.push({ title, description });
 			if (title.startsWith("Dailies")) {
 				throw new Error("transport failed");
 			}
 		}
 	});
-	assert.deepEqual(deliveries, ["Dailies Reminder (T-20h)", "Howl's News Stand Reminder (T-20h)"]);
+	assert.deepEqual(deliveries.map(({ title }) => title), ["Dailies Reminder", "Howl's News Stand Reminder"]);
+	assert.match(deliveries[0].description, /Reset in 9h 0m/);
 	const snapshot = values.get("reminders:snapshot:nap:123");
 	assert.equal(snapshot.tasks.dailies.status, COMPLETION.PENDING);
 	assert.equal(snapshot.tasks.dailies.deliveryFailure.name, "Error");

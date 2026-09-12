@@ -49,8 +49,9 @@ const fixtures = [{
 		card_sign: "CardSignDone",
 		energy: { progress: { current: 0, max: 240 }, restore: 0 },
 		vitality: { current: 400, max: 400 },
-		bounty_commission: { num: 4, total: 4 },
-		survey_points: { num: 8000, total: 8000 }
+		bounty_commission: { num: 4, total: 4, unlock: true, hide: false },
+		survey_points: { num: 8000, total: 8000 },
+		weekly_task: { cur_point: 1050, max_point: 2100, unlock: true }
 	}
 }];
 
@@ -95,3 +96,46 @@ for (const fixture of fixtures) {
 		}).status, COMPLETION.UNKNOWN);
 	});
 }
+
+test("ZZZ keeps missing counters and unrecognized scratch-card state unknown", async () => {
+	const fixture = fixtures.find(item => item.name === "nap");
+	let body = {
+		...fixture.body,
+		card_sign: "FutureCardState",
+		energy: { progress: { max: 240 } },
+		vitality: { max: 400 },
+		bounty_commission: null,
+		survey_points: null
+	};
+	global.app = {
+		Date: { now: () => responseReceivedAt },
+		Got: async () => ({ statusCode: 200, body: { retcode: 0, data: body } }),
+		HoyoLab: { parseCookie: () => "cookie" },
+		Logger: { log: () => {}, warn: () => {} },
+		Utils: { generateDS: () => "ds" }
+	};
+	const notes = new fixture.Notes({
+		config: { assets: {}, url: { notes: "https://example.test/notes" } },
+		dataCache: { get: async () => null, set: async () => {} }
+	});
+	const account = { stamina: { threshold: 100 }, cookie: "secret", uid: "test" };
+	const result = await notes.notes(account, { fresh: true });
+	assert.equal(result.data.cardSign, "Unknown");
+	assert.equal(result.data.stamina.currentStamina, undefined);
+	assert.equal(result.data.weeklies.bounty, undefined);
+	assert.equal(result.data.weeklies.surveyPoints, undefined);
+	assert.equal(classifyCompletion({
+		current: result.data.dailies.task,
+		maximum: result.data.dailies.maxTask,
+		observedAt: result.observedAt,
+		now: responseReceivedAt,
+		maxAgeMs: 120_000
+	}).status, COMPLETION.UNKNOWN);
+	body = { ...fixture.body, card_sign: "CardSignNo" };
+	const valid = await notes.notes(account, { fresh: true });
+	assert.equal(valid.data.cardSign, "Not Completed");
+	assert.equal(valid.data.weeklies.weeklyTaskPoints, 1050);
+	assert.equal(valid.data.weeklies.weeklyTaskTarget, 2100);
+	assert.equal(valid.data.weeklies.weeklyTaskUnlocked, true);
+	assert.equal(valid.data.weeklies.bountyHidden, false);
+});
