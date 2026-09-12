@@ -170,13 +170,13 @@ module.exports = class StarRail extends require("../template.js") {
 		return await ci.checkAndExecute(accountData);
 	}
 
-	async notes (accountData) {
+	async notes (accountData, options) {
 		const rn = new Notes(this, {
 			logo: this.#logo,
 			color: this.#color
 		});
 
-		return await rn.notes(accountData);
+		return await rn.notes(accountData, options);
 	}
 
 	async redeemCode (accountData, code) {

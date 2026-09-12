@@ -1,3 +1,4 @@
+const { NotificationClass, dispatchNotification } = require("../../singleton/notification-dispatch.js");
 const RegionalTaskManager = new app.RegionalTaskManager();
 
 RegionalTaskManager.registerTask("WeekliesReminder", 21, 0, async (account) => {
@@ -15,10 +16,9 @@ RegionalTaskManager.registerTask("WeekliesReminder", 21, 0, async (account) => {
 	const { data } = notes;
 	const weeklies = data.weeklies;
 
-	const platforms = app.Platform.getForAccount(account);
-	const webhooks = platforms.filter(p => p.name === "webhook");
-	const telegrams = platforms.filter(p => p.name === "telegram");
-	if (webhooks.length > 0) {
+	const hasWebhook = app.Platform.getForAccount(account).some(p => p.name === "webhook");
+	const hasTelegram = app.Platform.getForAccount(account).some(p => p.name === "telegram");
+	if (hasWebhook) {
 		const embed = {
 			color: data.assets.color,
 			title: "Weeklies Reminder",
@@ -104,17 +104,19 @@ RegionalTaskManager.registerTask("WeekliesReminder", 21, 0, async (account) => {
 			}
 		}
 
-		for (const webhook of webhooks) {
-			const userId = webhook.createUserMention(account.discord);
-			await webhook.send(embed, {
-				content: userId,
-				author: data.assets.author,
-				icon: data.assets.logo
-			});
-		}
+		await dispatchNotification(NotificationClass.Action, {
+			webhook: {
+				message: embed,
+				options: webhook => ({
+					content: webhook.createUserMention(account.discord),
+					author: data.assets.author,
+					icon: data.assets.logo
+				})
+			}
+		}, account);
 	}
 
-	if (telegrams.length > 0) {
+	if (hasTelegram) {
 		const message = [
 			"📅 **Weeklies Reminder**",
 			"",
@@ -168,9 +170,7 @@ RegionalTaskManager.registerTask("WeekliesReminder", 21, 0, async (account) => {
 		}
 
 		const escapedMessage = app.Utils.escapeCharacters(message.join("\n"));
-		for (const telegram of telegrams) {
-			await telegram.send(escapedMessage);
-		}
+		await dispatchNotification(NotificationClass.Action, { telegram: escapedMessage }, account);
 	}
 });
 

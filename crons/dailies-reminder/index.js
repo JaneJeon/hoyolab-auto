@@ -1,3 +1,4 @@
+const { NotificationClass, dispatchNotification } = require("../../singleton/notification-dispatch.js");
 const RegionalTaskManager = new app.RegionalTaskManager();
 
 RegionalTaskManager.registerTask("DailiesReminder", 21, 0, async (account) => {
@@ -20,7 +21,6 @@ RegionalTaskManager.registerTask("DailiesReminder", 21, 0, async (account) => {
 		return;
 	}
 
-	const platforms = app.Platform.getForAccount(account);
 	const embed = {
 		color: data.assets.color,
 		title: "Dailies Reminder",
@@ -43,15 +43,6 @@ RegionalTaskManager.registerTask("DailiesReminder", 21, 0, async (account) => {
 		}
 	};
 
-	for (const webhook of platforms.filter(p => p.name === "webhook")) {
-		const userId = webhook.createUserMention(account.discord);
-		await webhook.send(embed, {
-			content: userId,
-			author: data.assets.author,
-			icon: data.assets.logo
-		});
-	}
-
 	const messageText = [
 		`📢 Dailies Reminder, Don't Forget to Do Your Dailies!`,
 		`🎮 **Game**: ${data.assets.game}`,
@@ -62,9 +53,17 @@ RegionalTaskManager.registerTask("DailiesReminder", 21, 0, async (account) => {
 	].join("\n");
 
 	const escapedMessage = app.Utils.escapeCharacters(messageText);
-	for (const telegram of platforms.filter(p => p.name === "telegram")) {
-		await telegram.send(escapedMessage);
-	}
+	await dispatchNotification(NotificationClass.Action, {
+		telegram: escapedMessage,
+		webhook: {
+			message: embed,
+			options: webhook => ({
+				content: webhook.createUserMention(account.discord),
+				author: data.assets.author,
+				icon: data.assets.logo
+			})
+		}
+	}, account);
 });
 
 module.exports = {

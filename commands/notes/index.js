@@ -1,5 +1,6 @@
-const getNotesEmbedData = async (accounts, game, platformId) => {
+const getNotesEmbedData = async (accounts, game, platformName) => {
 	const embedData = [];
+	const telegramMessages = [];
 	for (const account of accounts) {
 		const { stamina, expedition } = account;
 		if (!stamina.check && !expedition.check) {
@@ -12,7 +13,7 @@ const getNotesEmbedData = async (accounts, game, platformId) => {
 			continue;
 		}
 
-		if (platformId === 1) {
+		if (platformName === "Discord") {
 			const region = app.HoyoLab.getRegion(account.region);
 			const { data } = notes;
 			const { stamina, dailies, weeklies, expedition, realm } = data;
@@ -126,11 +127,9 @@ const getNotesEmbedData = async (accounts, game, platformId) => {
 
 			embedData.push(embed);
 		}
-		else if (platformId === 2) {
+		else if (platformName === "Telegram") {
 			const { data } = notes;
 			const { stamina, dailies, weeklies, expedition } = data;
-			const telegram = app.Platform.get(2);
-
 			let message = "";
 			if (platform.gameId === 2) {
 				const { task, maxTask, storedAttendance, storedAttendanceRefresh } = dailies;
@@ -178,12 +177,11 @@ const getNotesEmbedData = async (accounts, game, platformId) => {
 				].join("\n");
 			}
 
-			const escapedMessage = app.Utils.escapeCharacters(message);
-			await telegram.send(escapedMessage);
+			telegramMessages.push(message);
 		}
 	}
 
-	return embedData;
+	return { embedData, telegramMessages };
 };
 
 module.exports = {
@@ -260,10 +258,13 @@ module.exports = {
 			}
 		}
 
-		const embedData = await getNotesEmbedData(accounts, game, context.platform.id);
+		const { embedData, telegramMessages } = await getNotesEmbedData(accounts, game, context.platform.name);
 
 		if (interaction) {
 			await interaction.reply({ embeds: embedData, ephemeral: true });
+		}
+		else {
+			return { success: true, reply: telegramMessages.join("\n\n") };
 		}
 	})
 };

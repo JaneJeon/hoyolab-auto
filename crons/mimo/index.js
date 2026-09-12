@@ -1,5 +1,7 @@
 const { setTimeout: sleep } = require("node:timers/promises");
 const config = require("../../config.js");
+const { NotificationClass, dispatchNotification } = require("../../singleton/notification-dispatch.js");
+const { splitAutomationReport } = require("../../object/notification-report.js");
 
 module.exports = {
 	name: "mimo",
@@ -42,59 +44,14 @@ module.exports = {
 							error: result.message
 						});
 
-						const isCriticalError = result.message?.toLowerCase().includes("cookie")
-							|| result.message?.toLowerCase().includes("expired")
-							|| result.message?.toLowerCase().includes("login");
-
-						if (isCriticalError) {
-							const region = app.HoyoLab.getRegion(account.region);
-							const platforms = app.Platform.getForAccount(account);
-							const embed = {
-								color: 0xFF0000,
-								title: `🐾 Traveling Mimo Failure - ${account.game.name}`,
-								author: {
-									name: `${region} Server - ${account.nickname}`,
-									icon_url: account.assets?.logo
-								},
-								description: `**Automation Failed:** ${result.message}`,
-								timestamp: new Date(),
-								footer: {
-									text: "Traveling Mimo Automation",
-									icon_url: account.assets?.logo
-								}
-							};
-
-							for (const webhook of platforms.filter(p => p.name === "webhook")) {
-								await webhook.send(embed, {
-									content: webhook.createUserMention(account.discord),
-									author: account.assets?.author,
-									icon: account.assets?.logo
-								});
-							}
-
-							const failureText = [
-								`🐾 *Traveling Mimo Failure* - ${account.game.name}`,
-								`Region: ${region} | UID: ${account.uid}`,
-								`Player: ${account.nickname}`,
-								"",
-								`❌ *Error:* ${result.message}`
-							].join("\n");
-							const escapedFailureText = app.Utils.escapeCharacters(failureText);
-							for (const telegram of platforms.filter(p => p.name === "telegram")) {
-								await telegram.send(escapedFailureText);
-							}
-						}
 						continue;
 					}
 
 					const { data } = result;
 
-					const hasActivity = data.tasksClaimed.length > 0
-						|| data.itemsExchanged.length > 0
-						|| data.codesRedeemed.length > 0
-						|| data.codesObtained?.length > 0
-						|| data.lotteryDraws?.length > 0
-						|| data.errors?.length > 0;
+					const reportParts = splitAutomationReport(data);
+					const hasActivity = reportParts.length > 0;
+					const hasReceiptActivity = reportParts.some(part => part.notificationClass === NotificationClass.Receipt);
 
 					if (!hasActivity) {
 						app.Logger.debug("Cron:Mimo", `(${account.uid}) ${account.game.short}: No new Mimo activity.`);
@@ -102,10 +59,7 @@ module.exports = {
 					}
 
 					const region = app.HoyoLab.getRegion(account.region);
-					const platforms = app.Platform.getForAccount(account);
-					const webhooks = platforms.filter(p => p.name === "webhook");
-					const telegrams = platforms.filter(p => p.name === "telegram");
-					if (webhooks.length > 0) {
+					if (hasReceiptActivity) {
 						const fields = [];
 
 						if (data.tasksClaimed.length > 0) {
@@ -133,14 +87,6 @@ module.exports = {
 							fields.push({
 								name: "✅ Codes Redeemed",
 								value: data.codesRedeemed.join(", ").slice(0, 1024),
-								inline: false
-							});
-						}
-
-						if (data.codesObtained?.length > 0) {
-							fields.push({
-								name: "🎫 Codes Obtained (Not Auto-Redeemed)",
-								value: data.codesObtained.map(c => `\`${c}\``).join("\n").slice(0, 1024),
 								inline: false
 							});
 						}
@@ -202,23 +148,20 @@ module.exports = {
 						};
 
 						const hasSignificantActivity = data.itemsExchanged.length > 0
-							|| data.codesRedeemed.length > 0
-							|| data.codesObtained?.length > 0;
-
-						for (const webhook of webhooks) {
-							const userId = hasSignificantActivity
-								? webhook.createUserMention(account.discord)
-								: null;
-
-							await webhook.send(embed, {
-								...(userId && { content: userId }),
-								author: data.assets.author,
-								icon: data.assets.logo
-							});
-						}
+							|| data.codesRedeemed.length > 0;
+						await dispatchNotification(NotificationClass.Receipt, {
+							webhook: {
+								message: embed,
+								options: webhook => ({
+									...(hasSignificantActivity && { content: webhook.createUserMention(account.discord) }),
+									author: data.assets.author,
+									icon: data.assets.logo
+								})
+							}
+						}, account);
 					}
 
-					if (telegrams.length > 0) {
+					if (hasReceiptActivity) {
 						const lines = [
 							`🐾 *Traveling Mimo* - ${account.game.name}`,
 							`Region: ${region} | UID: ${account.uid}`,
@@ -239,14 +182,9 @@ module.exports = {
 							lines.push(`✅ Codes Redeemed: ${data.codesRedeemed.join(", ")}`);
 						}
 
-						if (data.codesObtained?.length > 0) {
-							lines.push(`🎫 Codes Obtained (Not Auto-Redeemed):`);
-							for (const c of data.codesObtained) {
-								lines.push(`  \`${c}\``);
-							}
+						if (data.lotteryDraws?.length > 0) {
+							lines.push(`🎰 Lottery Draws: ${data.lotteryDraws.map(d => d.name).join(", ")}`);
 						}
-
-						if (data.lotteryDraws?.length > 0) { lines.push(`🎰 Lottery Draws: ${data.lotteryDraws.map(d => d.name).join(", ")}`); }
 
 						if (data.errors?.length > 0) {
 							lines.push(`❌ Errors:`);
@@ -257,9 +195,38 @@ module.exports = {
 						lines.push(`💎 Current Points: ${data.points}`);
 
 						const escapedMessage = app.Utils.escapeCharacters(lines.join("\n"));
-						for (const telegram of telegrams) {
-							await telegram.send(escapedMessage);
-						}
+						await dispatchNotification(NotificationClass.Receipt, { telegram: escapedMessage }, account);
+					}
+
+					if (data.codesObtained?.length > 0) {
+						const actionLines = [
+							`🎫 *Mimo Codes Need Manual Redemption* - ${account.game.name}`,
+							`Region: ${region} | UID: ${account.uid}`,
+							`Player: ${account.nickname}`,
+							"",
+							...data.codesObtained.map(code => `\`${code}\``)
+						];
+						const actionEmbed = {
+							color: data.assets.color,
+							title: `🎫 Mimo Codes Need Manual Redemption - ${account.game.name}`,
+							author: {
+								name: `${region} Server - ${account.nickname}`,
+								icon_url: data.assets.logo
+							},
+							description: data.codesObtained.map(code => `\`${code}\``).join("\n"),
+							timestamp: new Date()
+						};
+						await dispatchNotification(NotificationClass.Action, {
+							telegram: app.Utils.escapeCharacters(actionLines.join("\n")),
+							webhook: {
+								message: actionEmbed,
+								options: webhook => ({
+									content: webhook.createUserMention(account.discord),
+									author: data.assets.author,
+									icon: data.assets.logo
+								})
+							}
+						}, account);
 					}
 
 					app.Logger.info("Cron:Mimo", `(${account.uid}) ${account.game.short}: Mimo automation completed.`);

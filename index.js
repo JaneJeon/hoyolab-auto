@@ -49,7 +49,6 @@ const config = require("./config.js");
 	await Command.importData(commands.definitions);
 
 	const { initCrons } = require("./crons/index.js");
-	initCrons();
 
 	const accountsConfig = config.accounts;
 	if (!accountsConfig || accountsConfig.length === 0) {
@@ -107,6 +106,12 @@ const config = require("./config.js");
 	await runHealthCheck().catch((e) => {
 		app.Logger.error("Client", `Startup health check failed: ${e.stack ?? e.message}`);
 	});
+	if (config.reminders?.enabled === true) {
+		const { code: runReminders } = require("./crons/deadline-reminders/index.js");
+		await runReminders().catch(() => {
+			app.Logger.error("Client", "Startup reminder evaluation failed; inspect reminder state and source health");
+		});
+	}
 
 	// Send test notifications to confirm platform functionality
 	if (config.testNotification?.enabled !== false) {
@@ -131,4 +136,8 @@ const config = require("./config.js");
 	process.on("uncaughtException", (err) => {
 		app.Logger.error("Client", `Uncaught exception: ${err?.stack ?? String(err)}`);
 	});
+
+	// Scheduled work must not run while account login and platform setup are
+	// still in progress, or before rejected jobs have a process-level handler.
+	initCrons();
 })();

@@ -2,6 +2,8 @@
  * Test Notification Utility
  * Handles sending test notifications to confirm platform functionality
  */
+const { NotificationClass, selectPlatforms } = require("./notification-dispatch.js");
+
 
 /**
  * Send test notifications to all configured platforms to confirm functionality
@@ -16,7 +18,8 @@ async function sendTestNotifications (platforms) {
 	app.Logger.info("TestNotification", "Sending test notifications to all configured platforms");
 
 	const testPromises = [];
-	for (const platform of platforms) {
+	const receiptPlatforms = selectPlatforms(Array.from(platforms), NotificationClass.Receipt);
+	for (const platform of receiptPlatforms) {
 		testPromises.push(sendPlatformTestNotification(platform));
 	}
 
@@ -25,7 +28,7 @@ async function sendTestNotifications (platforms) {
 	let successCount = 0;
 	let failureCount = 0;
 
-	const platformArray = Array.from(platforms);
+	const platformArray = receiptPlatforms;
 	for (const [index, result] of results.entries()) {
 		const platform = platformArray[index];
 

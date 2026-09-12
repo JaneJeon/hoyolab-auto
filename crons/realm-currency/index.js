@@ -1,3 +1,5 @@
+const { NotificationClass, dispatchNotification } = require("../../singleton/notification-dispatch.js");
+
 module.exports = {
 	name: "realm-currency",
 	expression: "0 */1 * * *",
@@ -37,7 +39,6 @@ module.exports = {
 				realm.fired = true;
 				platform.update(account);
 
-				const platforms = app.Platform.getForAccount(account);
 				const region = app.HoyoLab.getRegion(account.region);
 				const embed = {
 					color: data.assets.color,
@@ -64,15 +65,6 @@ module.exports = {
 					}
 				};
 
-				for (const webhook of platforms.filter(p => p.name === "webhook")) {
-					const userId = webhook.createUserMention(account.discord);
-					await webhook.send(embed, {
-						content: userId,
-						author: data.assets.author,
-						icon: data.assets.logo
-					});
-				}
-
 				const messageText = [
 					`💰 Realm Currency`,
 					`UID: ${account.uid} ${account.nickname}`,
@@ -80,9 +72,17 @@ module.exports = {
 				].join("\n");
 
 				const escapedMessage = app.Utils.escapeCharacters(messageText);
-				for (const telegram of platforms.filter(p => p.name === "telegram")) {
-					await telegram.send(escapedMessage);
-				}
+				await dispatchNotification(NotificationClass.Action, {
+					telegram: escapedMessage,
+					webhook: {
+						message: embed,
+						options: webhook => ({
+							content: webhook.createUserMention(account.discord),
+							author: data.assets.author,
+							icon: data.assets.logo
+						})
+					}
+				}, account);
 			}
 		}
 	})

@@ -3,6 +3,7 @@ const { CronJob } = require("cron");
 const CheckIn = require("./check-in/index.js");
 const CodeRedeem = require("./code-redeem/index.js");
 const DailiesReminder = require("./dailies-reminder/index.js");
+const DeadlineReminders = require("./deadline-reminders/index.js");
 const Expedition = require("./expedition/index.js");
 const Health = require("./health/index.js");
 const Hilichurl = require("./hilichurl/index.js");
@@ -20,6 +21,7 @@ const definitions = [
 	CheckIn,
 	CodeRedeem,
 	DailiesReminder,
+	DeadlineReminders,
 	Expedition,
 	Health,
 	Hilichurl,
@@ -46,6 +48,18 @@ const initCrons = () => {
 
 	const crons = [];
 	for (const definition of definitions) {
+		if (config.reminders?.enabled === true) {
+			const replaced = ["dailies-reminder", "howl-scratch-card", "stamina"];
+			if (Array.isArray(config.reminders.weeklyOffsets)) {
+				replaced.push("weeklies-reminder");
+			}
+			if (replaced.includes(definition.name)) {
+				continue;
+			}
+		}
+		else if (definition.name === "deadline-reminders") {
+			continue;
+		}
 		if (blacklist.length > 0 && blacklist.includes(definition.name)) {
 			continue;
 		}

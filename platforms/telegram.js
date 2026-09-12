@@ -10,6 +10,8 @@ module.exports = class Telegram extends require("./template.js") {
 		"/stamina",
 		"/expedition",
 		"/notes",
+		"/checkin",
+		"/tasks",
 		"/redeem"
 	];
 
@@ -110,12 +112,13 @@ module.exports = class Telegram extends require("./template.js") {
 
 	async handleCommand (data) {
 		const { command, args, channelData, userData } = data;
+		const replyOptions = { chat_id: channelData.id };
 
 		if (command === "redeem") {
 			// eslint-disable-next-line object-curly-spacing
 			const accounts = app.HoyoLab.getActiveAccounts({ blacklist: ["honkai", "tot"] });
 			if (accounts.length === 0) {
-				await this.send("There are no accounts available for redeeming codes.");
+				await this.send("There are no accounts available for redeeming codes.", replyOptions);
 				return;
 			}
 
@@ -136,6 +139,7 @@ module.exports = class Telegram extends require("./template.js") {
 			await this.send(
 				"Please select the account you want to redeem the code for:",
 				{
+					...replyOptions,
 					reply_markup: {
 						inline_keyboard: keyboard
 					}
@@ -151,7 +155,7 @@ module.exports = class Telegram extends require("./template.js") {
 			userData,
 			{
 				platform: {
-					id: 2,
+					id: this.id,
 					name: "Telegram"
 				}
 			}
@@ -165,7 +169,7 @@ module.exports = class Telegram extends require("./template.js") {
 
 		const message = this.prepareMessage(reply);
 		if (message) {
-			await this.send(message);
+			await this.send(message, replyOptions);
 		}
 	}
 
@@ -174,6 +178,8 @@ module.exports = class Telegram extends require("./template.js") {
 			this.handlingCallbackQuery = true;
 
 			try {
+				const chatId = messageData.callback_query.message?.chat.id;
+				const replyOptions = chatId === undefined ? {} : { chat_id: chatId };
 				const data = messageData.callback_query.data;
 				if (typeof data === "string" && data.startsWith("redeem:")) {
 					const parts = data.split(":");
@@ -181,11 +187,11 @@ module.exports = class Telegram extends require("./template.js") {
 					let game = parts[1];
 					const uid = parts[2];
 
-					await this.send("Please enter the code you want to redeem:");
+					await this.send("Please enter the code you want to redeem:", replyOptions);
 
 					const code = await this.waitForUserInput(
 						messageData.callback_query.from.id,
-						messageData.callback_query
+						chatId
 					);
 
 					if (code) {
@@ -202,10 +208,10 @@ module.exports = class Telegram extends require("./template.js") {
 						const res = await app.HoyoLab.redeemCode(game, uid, code);
 						if (!res.success) {
 							const reason = this.prepareMessage(res.data.reason);
-							await this.send(`Failed to redeem code: ${reason}`);
+							await this.send(`Failed to redeem code: ${reason}`, replyOptions);
 						}
 						else {
-							await this.send(`Successfully redeemed code: ${code}`);
+							await this.send(`Successfully redeemed code: ${code}`, replyOptions);
 						}
 					}
 					return;
@@ -236,10 +242,12 @@ module.exports = class Telegram extends require("./template.js") {
 		this.messageListeners = this.messageListeners.filter((l) => l !== listener);
 	}
 
-	async waitForUserInput (userId, callbackQuery) {
-		return new Promise((resolve, reject) => {
+	async waitForUserInput (userId, chatId) {
+		return new Promise((resolve) => {
 			const listener = async (msgData) => {
-				if (msgData.message && msgData.message.from.id === userId) {
+				if (msgData.message
+					&& msgData.message.from.id === userId
+					&& msgData.message.chat.id === chatId) {
 					const code = msgData.message.text;
 					this.removeMessageListener(listener);
 					resolve(code);

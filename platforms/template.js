@@ -1,4 +1,5 @@
 const WEBHOOK_REGEX = /https:\/\/discord.com\/api\/webhooks\/\d+\/[\w-]+/;
+const NOTIFICATION_CLASSES = ["Action", "Receipt"];
 
 module.exports = class Platform {
 	#id;
@@ -10,6 +11,7 @@ module.exports = class Platform {
 	#chatId;
 	#data;
 	#disableNotification;
+	#notificationClasses;
 
 	client;
 
@@ -45,6 +47,19 @@ module.exports = class Platform {
 		this.#prefix = config.prefix ?? null;
 		this.#chatId = config.chatId ?? null;
 		this.#disableNotification = config.disableNotification ?? false;
+		this.#notificationClasses = config.notificationClasses ?? null;
+		if (this.#notificationClasses !== null && !Array.isArray(this.#notificationClasses)) {
+			throw new app.Error({
+				message: "Platform notificationClasses must be an array.",
+				args: { notificationClasses: this.#notificationClasses }
+			});
+		}
+		if (this.#notificationClasses?.some(value => !NOTIFICATION_CLASSES.includes(value))) {
+			throw new app.Error({
+				message: "Platform has an unknown notification class.",
+				args: { notificationClasses: this.#notificationClasses }
+			});
+		}
 
 		this.#data = config.platform ?? {};
 
@@ -66,6 +81,7 @@ module.exports = class Platform {
 	get Data () { return this.#data; }
 	get data () { return this.#data; }
 	get disableNotification () { return this.#disableNotification; }
+	get notificationClasses () { return this.#notificationClasses; }
 
 	initListeners () {}
 

@@ -1,3 +1,5 @@
+const { NotificationClass, dispatchNotification } = require("../../singleton/notification-dispatch.js");
+
 module.exports = {
 	name: "check-in",
 	expression: "0 0 0 * * *",
@@ -31,7 +33,6 @@ module.exports = {
 		for (let i = 0; i < messages.length; i++) {
 			const message = messages[i];
 			const account = app.HoyoLab.getAccountById(message.uid);
-			const platforms = app.Platform.getForAccount(account);
 
 			let fields = [
 				{ name: "UID", value: message.uid, inline: true },
@@ -65,13 +66,6 @@ module.exports = {
 				}
 			};
 
-			for (const webhook of platforms.filter(p => p.name === "webhook")) {
-				await webhook.send(embed, {
-					author: message.assets.author,
-					icon: message.assets.logo
-				});
-			}
-
 			const messageText = [
 				`🎮 **${message.assets.game}** Daily Check-In`,
 				`🆔 **(${message.uid})** ${message.username}`,
@@ -83,9 +77,16 @@ module.exports = {
 			].join("\n");
 
 			const escapedMessage = app.Utils.escapeCharacters(messageText);
-			for (const telegram of platforms.filter(p => p.name === "telegram")) {
-				await telegram.send(escapedMessage);
-			}
+			await dispatchNotification(NotificationClass.Receipt, {
+				telegram: escapedMessage,
+				webhook: {
+					message: embed,
+					options: {
+						author: message.assets.author,
+						icon: message.assets.logo
+					}
+				}
+			}, account);
 		}
 	})
 };
