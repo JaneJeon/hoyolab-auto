@@ -91,9 +91,10 @@ test("only evidenced invalid-code retcodes receive the routine treatment", () =>
 	assert.match(buildMessage("failed", { code, retcode: -99999, reason: "unknown" }).telegram, /Unexpected Code Redemption Failure/);
 });
 
-const telegramBot = (id) => {
+const telegramBot = (id, chatId) => {
 	const bot = platform(undefined);
 	bot.id = id;
+	bot.chatId = chatId;
 	bot.prepareMessage = message => message;
 	bot.handleCommand = data => Telegram.prototype.handleCommand.call(bot, data);
 	bot.messageListeners = [];
@@ -109,8 +110,8 @@ const processTelegramCommand = (bot, text, chatId) => Telegram.prototype.process
 }]);
 
 test("the real Notes command replies only through the ID 4 bot and source chat", async () => {
-	const bot2 = telegramBot(2);
-	const bot4 = telegramBot(4);
+	const bot2 = telegramBot(2, 654);
+	const bot4 = telegramBot(4, 987);
 	Command.data = [new Command(notesCommand)];
 	global.app = {
 		Command,
@@ -156,8 +157,8 @@ test("the real Notes command replies only through the ID 4 bot and source chat",
 });
 
 test("the real Check-In command replies only through the ID 2 bot and source chat", async () => {
-	const bot2 = telegramBot(2);
-	const bot4 = telegramBot(4);
+	const bot2 = telegramBot(2, 654);
+	const bot4 = telegramBot(4, 987);
 	Command.data = [new Command(checkinCommand)];
 	global.app = {
 		Command,
@@ -186,6 +187,66 @@ test("the real Check-In command replies only through the ID 2 bot and source cha
 	assert.equal(bot2.sent[0].options.chat_id, 654);
 	assert.match(bot2.sent[0].message, /Manual Check-In/);
 	assert.deepEqual(bot4.sent, []);
+});
+
+test("Telegram ignores commands and callbacks from an unconfigured chat", async () => {
+	const bot = telegramBot(4, 987);
+	let handledCallbacks = 0;
+	bot.handleMessage = async () => {
+		handledCallbacks++;
+	};
+	global.app = { Command };
+
+	await Telegram.prototype.processMessageUpdates.call(bot, [
+		{
+			message: {
+				text: "/notes starrail",
+				chat: { id: 111 },
+				from: { id: 1 }
+			}
+		},
+		{
+			callback_query: {
+				message: { chat: { id: 111 } },
+				from: { id: 1 },
+				data: "redeem:starrail:123"
+			}
+		}
+	]);
+
+	assert.deepEqual(bot.sent, []);
+	assert.equal(handledCallbacks, 0);
+});
+
+test("real Telegram send honors both configured notification settings", async (t) => {
+	t.mock.method(global, "setInterval", () => 0);
+	const requests = [];
+	global.app = {
+		Got: async (name, request) => {
+			requests.push({ name, request });
+			return { body: { ok: true } };
+		}
+	};
+	const receipt = new Telegram({
+		id: 2,
+		chatId: 987,
+		token: "receipt-token",
+		disableNotification: true,
+		notificationClasses: [NotificationClass.Receipt]
+	});
+	const action = new Telegram({
+		id: 4,
+		chatId: 987,
+		token: "action-token",
+		disableNotification: false,
+		notificationClasses: [NotificationClass.Action]
+	});
+
+	await receipt.send("receipt");
+	await action.send("action");
+
+	assert.equal(requests[0].request.json.disable_notification, true);
+	assert.equal(requests[1].request.json.disable_notification, false);
 });
 
 test("Telegram callback input ignores a message from another chat", async () => {

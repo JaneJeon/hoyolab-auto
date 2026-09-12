@@ -1,7 +1,6 @@
 module.exports = class Telegram extends require("./template.js") {
 	lastUpdatedId = 0;
 	firstRun = true;
-	disableNotification = false;
 	messageListeners = [];
 
 	handlingCallbackQuery = false;
@@ -259,6 +258,12 @@ module.exports = class Telegram extends require("./template.js") {
 
 	async processMessageUpdates (result) {
 		for (const update of result) {
+			const sourceChatId = update.callback_query?.message?.chat?.id
+				?? update.message?.chat?.id;
+			if (sourceChatId === undefined || String(sourceChatId) !== String(this.chatId)) {
+				continue;
+			}
+
 			if (update.callback_query && !this.handlingCallbackQuery) {
 				await this.handleMessage(update);
 			}
