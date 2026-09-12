@@ -11,6 +11,12 @@ test("weekly completion only resolves supported valid counters", () => {
 		weeklyBoss: 0,
 		weeklyBossLimit: 3,
 		rogueScore: 14_000,
+		maxScore: 14_000
+	}), COMPLETION.UNKNOWN);
+	assert.equal(weeklyCompletion("starrail", {
+		weeklyBoss: 0,
+		weeklyBossLimit: 3,
+		rogueScore: 14_000,
 		maxScore: 14_000,
 		tournUnlocked: false,
 		tournScore: 0,

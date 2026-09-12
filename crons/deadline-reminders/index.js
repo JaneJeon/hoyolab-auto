@@ -37,6 +37,9 @@ const weeklyCompletion = (type, weeklies) => {
 		return COMPLETION.UNKNOWN;
 	}
 	if (type === "starrail") {
+		if (typeof weeklies.tournUnlocked !== "boolean") {
+			return COMPLETION.UNKNOWN;
+		}
 		const bossValid = validProgress(weeklies.weeklyBoss, weeklies.weeklyBossLimit);
 		const rogueValid = validProgress(weeklies.rogueScore, weeklies.maxScore);
 		if (!bossValid || !rogueValid) {
