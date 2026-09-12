@@ -1,5 +1,7 @@
 const { setTimeout: sleep } = require("node:timers/promises");
 const config = require("../../config.js");
+const { NotificationClass, dispatchNotification } = require("../../singleton/notification-dispatch.js");
+const { splitAutomationReport } = require("../../object/notification-report.js");
 
 module.exports = {
 	name: "hilichurl",
@@ -41,16 +43,31 @@ module.exports = {
 						uid: account.uid,
 						error: result.message
 					});
+					const region = app.HoyoLab.getRegion(account.region);
+					const failureText = [
+						"🔧 *Hilichurl Workshop Run Failed*",
+						`Region: ${region} | UID: ${account.uid}`,
+						`Player: ${account.nickname}`,
+						"",
+						`❌ *Error:* ${result.message}`
+					].join("\n");
+					await dispatchNotification(NotificationClass.Receipt, {
+						telegram: app.Utils.escapeCharacters(failureText),
+						webhook: {
+							color: 0xFF0000,
+							title: "🔧 Hilichurl Workshop Run Failed",
+							description: result.message,
+							timestamp: new Date()
+						}
+					}, account);
 					continue;
 				}
 
 				const { data } = result;
 
-				const hasActivity = data.tasksClaimed.length > 0
-					|| data.freeItemsClaimed?.length > 0
-					|| data.itemsExchanged.length > 0
-					|| data.codesRedeemed.length > 0
-					|| data.codesObtained?.length > 0;
+				const reportParts = splitAutomationReport(data);
+				const hasActivity = reportParts.length > 0;
+				const hasReceiptActivity = reportParts.some(part => part.notificationClass === NotificationClass.Receipt);
 
 				if (!hasActivity) {
 					app.Logger.debug("Cron:Hilichurl", `(${account.uid}) Genshin Impact: No new Hilichurl activity.`);
@@ -58,10 +75,7 @@ module.exports = {
 				}
 
 				const region = app.HoyoLab.getRegion(account.region);
-				const platforms = app.Platform.getForAccount(account);
-				const webhooks = platforms.filter(p => p.name === "webhook");
-				const telegrams = platforms.filter(p => p.name === "telegram");
-				if (webhooks.length > 0) {
+				if (hasReceiptActivity) {
 					const fields = [];
 
 					if (data.tasksClaimed.length > 0) {
@@ -97,14 +111,6 @@ module.exports = {
 						fields.push({
 							name: "✅ Codes Redeemed",
 							value: data.codesRedeemed.join(", ").slice(0, 1024),
-							inline: false
-						});
-					}
-
-					if (data.codesObtained?.length > 0) {
-						fields.push({
-							name: "🎫 Codes Obtained (Not Auto-Redeemed)",
-							value: data.codesObtained.map(c => `\`${c}\``).join("\n").slice(0, 1024),
 							inline: false
 						});
 					}
@@ -145,23 +151,20 @@ module.exports = {
 
 					const hasSignificantActivity = data.freeItemsClaimed?.length > 0
 						|| data.itemsExchanged.length > 0
-						|| data.codesRedeemed.length > 0
-						|| data.codesObtained?.length > 0;
-
-					for (const webhook of webhooks) {
-						const userId = hasSignificantActivity
-							? webhook.createUserMention(account.discord)
-							: null;
-
-						await webhook.send(embed, {
-							...(userId && { content: userId }),
-							author: data.assets.author,
-							icon: data.assets.logo
-						});
-					}
+						|| data.codesRedeemed.length > 0;
+					await dispatchNotification(NotificationClass.Receipt, {
+						webhook: {
+							message: embed,
+							options: webhook => ({
+								...(hasSignificantActivity && { content: webhook.createUserMention(account.discord) }),
+								author: data.assets.author,
+								icon: data.assets.logo
+							})
+						}
+					}, account);
 				}
 
-				if (telegrams.length > 0) {
+				if (hasReceiptActivity) {
 					const lines = [
 						"🔧 *Hilichurl Machine Workshop* - Genshin Impact",
 						`Region: ${region} | UID: ${account.uid}`,
@@ -186,19 +189,36 @@ module.exports = {
 						lines.push(`✅ Codes Redeemed: ${data.codesRedeemed.join(", ")}`);
 					}
 
-					if (data.codesObtained?.length > 0) {
-						lines.push("🎫 Codes Obtained (Not Auto-Redeemed):");
-						for (const c of data.codesObtained) {
-							lines.push(`  \`${c}\``);
-						}
-					}
-
 					lines.push(`💎 Current Points: ${data.points}`);
 
 					const escapedMessage = app.Utils.escapeCharacters(lines.join("\n"));
-					for (const telegram of telegrams) {
-						await telegram.send(escapedMessage);
-					}
+					await dispatchNotification(NotificationClass.Receipt, { telegram: escapedMessage }, account);
+				}
+
+				if (data.codesObtained?.length > 0) {
+					const actionLines = [
+						"🎫 *Hilichurl Codes Need Manual Redemption* - Genshin Impact",
+						`Region: ${region} | UID: ${account.uid}`,
+						`Player: ${account.nickname}`,
+						"",
+						...data.codesObtained.map(code => `\`${code}\``)
+					];
+					await dispatchNotification(NotificationClass.Action, {
+						telegram: app.Utils.escapeCharacters(actionLines.join("\n")),
+						webhook: {
+							message: {
+								color: data.assets.color,
+								title: "🎫 Hilichurl Codes Need Manual Redemption - Genshin Impact",
+								description: data.codesObtained.map(code => `\`${code}\``).join("\n"),
+								timestamp: new Date()
+							},
+							options: webhook => ({
+								content: webhook.createUserMention(account.discord),
+								author: data.assets.author,
+								icon: data.assets.logo
+							})
+						}
+					}, account);
 				}
 
 				app.Logger.info("Cron:Hilichurl", `(${account.uid}) Genshin Impact: Hilichurl automation completed.`);

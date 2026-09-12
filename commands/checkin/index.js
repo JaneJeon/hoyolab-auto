@@ -80,7 +80,7 @@ module.exports = {
 				: { success: true, reply: message };
 		}
 
-		if (platform.id === 1) {
+		if (platform.name === "Discord") {
 			const embeds = results.map((message, i) => {
 				let fields = [
 					{ name: "UID", value: message.uid, inline: true },
@@ -127,40 +127,28 @@ module.exports = {
 			if (interaction) {
 				await interaction.editReply({ embeds: embeds.slice(0, 10) });
 			}
-
-			const webhook = app.Platform.get(3);
-			if (webhook) {
-				for (const embed of embeds) {
-					await webhook.send(embed, {
-						author: "HoyoLab Auto",
-						icon: embed.author?.icon_url
-					});
-				}
-			}
 		}
-		else if (platform.id === 2) {
-			const telegram = app.Platform.get(2);
-			if (telegram) {
-				for (const message of results) {
-					const messageText = [
-						`🎮 **${message.assets.game}** Manual Check-In`,
-						`🆔 **(${message.uid})** ${message.username}`,
-						`🌍 **Region:** ${message.region}`,
-						`🏆 **Rank:** ${message.rank}`,
-						`🎁 **Today's Reward:** ${message.award.name} x${message.award.count}`,
-						`📅 **Total Sign-ins:** ${message.total}`,
-						`📝 **Result:** ${message.result}`
-					].join("\n");
+		else if (platform.name === "Telegram") {
+			const replies = [];
+			for (const message of results) {
+				const messageText = [
+					`🎮 **${message.assets.game}** Manual Check-In`,
+					`🆔 **(${message.uid})** ${message.username}`,
+					`🌍 **Region:** ${message.region}`,
+					`🏆 **Rank:** ${message.rank}`,
+					`🎁 **Today's Reward:** ${message.award.name} x${message.award.count}`,
+					`📅 **Total Sign-ins:** ${message.total}`,
+					`📝 **Result:** ${message.result}`
+				].join("\n");
 
-					const escapedMessage = app.Utils.escapeCharacters(messageText);
-					await telegram.send(escapedMessage);
-				}
-
-				if (errors.length > 0) {
-					const errorText = errors.map(e => `❌ ${e.game}: ${e.error}`).join("\n");
-					await telegram.send(app.Utils.escapeCharacters(errorText));
-				}
+				replies.push(messageText);
 			}
+
+			if (errors.length > 0) {
+				replies.push(errors.map(e => `❌ ${e.game}: ${e.error}`).join("\n"));
+			}
+
+			return { success: errors.length === 0, reply: replies.join("\n\n") };
 		}
 		else {
 			const summary = [];

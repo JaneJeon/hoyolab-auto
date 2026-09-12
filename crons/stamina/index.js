@@ -1,3 +1,5 @@
+const { NotificationClass, dispatchNotification } = require("../../singleton/notification-dispatch.js");
+
 module.exports = {
 	name: "stamina",
 	expression: "0 */30 * * * *",
@@ -50,8 +52,10 @@ module.exports = {
 				const description = (stamina.currentStamina === stamina.maxStamina)
 					? "Your stamina is full!"
 					: "Your stamina is within the set threshold!";
+				const event = (stamina.currentStamina === stamina.maxStamina)
+					? "full"
+					: "threshold";
 
-				const platforms = app.Platform.getForAccount(account);
 				const embed = {
 					color: data.assets.color,
 					title: "Stamina Reminder",
@@ -69,19 +73,10 @@ module.exports = {
 					],
 					timestamp: new Date(),
 					footer: {
-						text: "Stamina Reminder",
+						text: `Stamina Reminder (${event})`,
 						icon_url: data.assets.logo
 					}
 				};
-
-				for (const webhook of platforms.filter(p => p.name === "webhook")) {
-					const userId = webhook.createUserMention(account.discord);
-					await webhook.send(embed, {
-						content: userId,
-						author: data.assets.author,
-						icon: data.assets.logo
-					});
-				}
 
 				const messageText = [
 					`📢 Stamina Reminder, ${description}`,
@@ -93,9 +88,17 @@ module.exports = {
 				].join("\n");
 
 				const escapedMessage = app.Utils.escapeCharacters(messageText);
-				for (const telegram of platforms.filter(p => p.name === "telegram")) {
-					await telegram.send(escapedMessage);
-				}
+				await dispatchNotification(NotificationClass.Action, {
+					telegram: escapedMessage,
+					webhook: {
+						message: embed,
+						options: webhook => ({
+							content: webhook.createUserMention(account.discord),
+							author: data.assets.author,
+							icon: data.assets.logo
+						})
+					}
+				}, account);
 			}
 		}
 	})

@@ -241,7 +241,9 @@ const buildMessage = (status, data) => {
 			includeRewards = true;
 			break;
 		case "failed":
-			messageTitle = `Code Redeem Failed! (${data.reason})`;
+			messageTitle = classifyRedeemFailure(data.retcode) === "known-code"
+				? `Code Not Redeemed (${data.reason})`
+				: `Unexpected Code Redemption Failure (${data.reason})`;
 			includeManualLink = Boolean(redeemLink);
 			break;
 		case "manual":
@@ -317,6 +319,10 @@ const buildMessage = (status, data) => {
 	};
 };
 
+const classifyRedeemFailure = retcode => [-2001, -2003].includes(retcode)
+	? "known-code"
+	: "unexpected";
+
 const checkCachedCodes = async (codes) => {
 	const newCodes = {};
 
@@ -354,5 +360,6 @@ const checkCachedCodes = async (codes) => {
 module.exports = {
 	fetchCodes,
 	checkAndRedeem,
-	buildMessage
+	buildMessage,
+	classifyRedeemFailure
 };

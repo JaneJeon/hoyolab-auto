@@ -3,6 +3,7 @@ const {
 	checkAndRedeem,
 	buildMessage
 } = require("./utils");
+const { NotificationClass, dispatchNotification } = require("../../singleton/notification-dispatch.js");
 
 module.exports = {
 	name: "code-redeem",
@@ -44,41 +45,30 @@ module.exports = {
 
 		for (const data of success) {
 			const message = buildMessage("success", data);
-			const platforms = app.Platform.getForAccount(data.account);
 			const escapedMessage = app.Utils.escapeCharacters(message.telegram);
-
-			for (const telegram of platforms.filter(p => p.name === "telegram")) {
-				await telegram.send(escapedMessage);
-			}
-			for (const webhook of platforms.filter(p => p.name === "webhook")) {
-				await webhook.send(message.embed);
-			}
+			await dispatchNotification(NotificationClass.Receipt, {
+				telegram: escapedMessage,
+				webhook: message.embed
+			}, data.account);
 		}
 
 		for (const data of failed) {
 			const message = buildMessage("failed", data);
-			const platforms = app.Platform.getForAccount(data.account);
 			const escapedMessage = app.Utils.escapeCharacters(message.telegram);
-
-			for (const telegram of platforms.filter(p => p.name === "telegram")) {
-				await telegram.send(escapedMessage);
-			}
-			for (const webhook of platforms.filter(p => p.name === "webhook")) {
-				await webhook.send(message.embed);
-			}
+			await dispatchNotification(NotificationClass.Receipt, {
+				telegram: escapedMessage,
+				webhook: message.embed
+			}, data.account);
 		}
 
 		// manual entries are game-level (no account), so send to all platforms
 		for (const data of manual) {
 			const message = buildMessage("manual", data);
 			const escapedMessage = app.Utils.escapeCharacters(message.telegram);
-
-			for (const telegram of app.Platform.list.filter(p => p.name === "telegram")) {
-				await telegram.send(escapedMessage);
-			}
-			for (const webhook of app.Platform.list.filter(p => p.name === "webhook")) {
-				await webhook.send(message.embed);
-			}
+			await dispatchNotification(NotificationClass.Action, {
+				telegram: escapedMessage,
+				webhook: message.embed
+			});
 		}
 	}
 };
